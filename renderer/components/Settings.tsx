@@ -1,15 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      getStoragePath: () => Promise<string>;
-      setStoragePath: (path: string) => Promise<{ success: boolean }>;
-      selectStorageFolder: () => Promise<string | null>;
-    };
-  }
-}
-
 const Settings: React.FC = () => {
   const [storagePath, setStoragePath] = useState('');
   const [loading, setLoading] = useState(true);

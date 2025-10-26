@@ -14,6 +14,11 @@ declare global {
       }>>;
       deleteVideo: (filename: string) => Promise<{ success: boolean }>;
       getVideoPath: (filename: string) => Promise<string>;
+      searchByQR: (qrText: string) => Promise<any>;
+      showInFolder: (filePath: string) => Promise<{ success: boolean }>;
+      getStoragePath: () => Promise<string>;
+      setStoragePath: (path: string) => Promise<{ success: boolean }>;
+      selectStorageFolder: () => Promise<string | null>;
     };
   }
 }

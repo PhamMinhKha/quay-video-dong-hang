@@ -1,14 +1,5 @@
 import React, { useState } from 'react';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      searchByQR: (qrText: string) => Promise<any[]>;
-      getVideoPath: (filename: string) => Promise<string>;
-    };
-  }
-}
-
 const SearchByQR: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [results, setResults] = useState<any[]>([]);

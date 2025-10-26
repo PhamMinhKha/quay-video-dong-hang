@@ -1,20 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
-declare global {
-  interface Window {
-    electronAPI: {
-      listVideos: () => Promise<Array<{
-        filename: string;
-        path: string;
-        size: number;
-        created: Date;
-        metadata: any;
-      }>>;
-      deleteVideo: (filename: string) => Promise<{ success: boolean }>;
-      showInFolder: (filePath: string) => Promise<{ success: boolean }>;
-    };
-  }
-}
+import QRTimeline from './QRTimeline';
 
 interface VideoItem {
   filename: string;
@@ -28,8 +13,10 @@ const VideoManager: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [timelineVideo, setTimelineVideo] = useState<{path: string, detections: any[]} | null>(null);
 
   useEffect(() => {
+    console.log('🔄 VideoManager useEffect - loading videos...');
     loadVideos();
   }, []);
 
@@ -67,6 +54,24 @@ const VideoManager: React.FC = () => {
     }
   };
 
+  const handleShowTimeline = (video: VideoItem) => {
+    console.log('🎬 Showing timeline for:', video);
+    if (video.metadata?.detections && video.metadata.detections.length > 0) {
+      console.log('📊 QR detections:', video.metadata.detections);
+      setTimelineVideo({
+        path: video.path,
+        detections: video.metadata.detections
+      });
+    } else {
+      console.log('❌ No QR detections found - showing empty timeline');
+      // Hiển thị timeline trống để test
+      setTimelineVideo({
+        path: video.path,
+        detections: []
+      });
+    }
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
@@ -89,12 +94,26 @@ const VideoManager: React.FC = () => {
     <div className="h-full flex flex-col p-4">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-bold">Danh sách Video</h2>
-        <button
-          onClick={loadVideos}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          🔄 Làm mới
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => console.log('Videos:', videos)}
+            className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
+          >
+            🐛 Debug Data
+          </button>
+          <button
+            onClick={() => console.log('ElectronAPI:', window.electronAPI)}
+            className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
+          >
+            🐛 Debug API
+          </button>
+          <button
+            onClick={loadVideos}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            🔄 Làm mới
+          </button>
+        </div>
       </div>
 
       {videos.length === 0 ? (
@@ -148,6 +167,28 @@ const VideoManager: React.FC = () => {
                   </div>
                   <div className="flex flex-col gap-2">
                     <button
+                      onClick={() => {
+                        console.log('🎬 Video clicked:', video);
+                        console.log('📊 Metadata:', video.metadata);
+                        console.log('🔍 Detections:', video.metadata?.detections);
+                        console.log('📝 Notes:', video.metadata?.notes);
+                      }}
+                      className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-xs"
+                    >
+                      🐛 Debug Video
+                    </button>
+                    <button
+                      onClick={() => handleShowTimeline(video)}
+                      className={`px-4 py-2 rounded-lg text-sm ${
+                        video.metadata?.detections && video.metadata.detections.length > 0
+                          ? 'bg-green-500 hover:bg-green-600 text-white'
+                          : 'bg-gray-400 hover:bg-gray-500 text-white'
+                      }`}
+                      disabled={!video.metadata?.detections || video.metadata.detections.length === 0}
+                    >
+                      📊 Timeline QR ({video.metadata?.detections?.length || 0})
+                    </button>
+                    <button
                       onClick={() => handleShowLocation(video.path)}
                       className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
                     >
@@ -165,6 +206,15 @@ const VideoManager: React.FC = () => {
             ))}
           </div>
         </div>
+      )}
+
+      {/* QR Timeline Modal */}
+      {timelineVideo && (
+        <QRTimeline
+          videoPath={timelineVideo.path}
+          detections={timelineVideo.detections}
+          onClose={() => setTimelineVideo(null)}
+        />
       )}
     </div>
   );

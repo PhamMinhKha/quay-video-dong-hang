@@ -3,14 +3,6 @@ import jsQR from 'jsqr';
 import QRDetector from './QRDetector';
 import { VideoMetadata } from '../../main/preload';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      saveVideo: (data: { filename: string; buffer: ArrayBuffer; metadata: VideoMetadata }) => Promise<any>;
-    };
-  }
-}
-
 interface QRDetection {
   text: string;
   time: number;
@@ -34,6 +26,30 @@ const CameraView: React.FC = () => {
   const detectionHistoryRef = useRef<Set<string>>(new Set());
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
+  const [recordingTime, setRecordingTime] = useState<number>(0);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Tạo âm thanh thông báo QR detection
+  const playQRDetectionSound = useCallback(() => {
+    try {
+      // Tạo âm thanh beep đơn giản
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // Tần số 800Hz
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.2);
+    } catch (error) {
+      console.log('Could not play sound:', error);
+    }
+  }, []);
 
   const detectQR = useCallback(() => {
     if (!canvasRef.current || !videoRef.current) return;
@@ -53,9 +69,24 @@ const CameraView: React.FC = () => {
       const result = jsQR(imageData.data, canvas.width, canvas.height);
 
       if (result) {
+        // Tính thời gian dựa trên startTimeRef - không phụ thuộc vào isRecording state
+        const currentTime = startTimeRef.current > 0
+          ? (Date.now() - startTimeRef.current) / 1000 
+          : 0;
+        
+        console.log('🕐 Detection timing:', {
+          isRecording,
+          startTime: startTimeRef.current,
+          currentTimestamp: Date.now(),
+          calculatedTime: currentTime,
+          qrText: result.data,
+          startTimeExists: startTimeRef.current > 0,
+          timeDiff: startTimeRef.current > 0 ? Date.now() - startTimeRef.current : 'N/A'
+        });
+          
         const detection: QRDetection = {
           text: result.data,
-          time: video.currentTime,
+          time: currentTime,
           bbox: {
             x: result.location.topLeftCorner.x,
             y: result.location.topLeftCorner.y,
@@ -64,14 +95,57 @@ const CameraView: React.FC = () => {
           },
         };
 
-        setDetections([detection]);
+        // Lưu tất cả detections, không chỉ detection cuối cùng
+        setDetections(prev => {
+          const key = `${detection.text}_${detection.time.toFixed(2)}`;
+          const exists = prev.some(d => `${d.text}_${d.time.toFixed(2)}` === key);
+          if (!exists) {
+            console.log('🔍 New QR detected:', detection);
+            return [...prev, detection];
+          }
+          return prev;
+        });
+        
+        // Lưu detection khi đang quay (chỉ cần startTimeRef > 0 và currentTime > 0)
+        if (startTimeRef.current > 0 && currentTime > 0) {
+          const key = `${detection.text}_${detection.time.toFixed(2)}`;
+          console.log('🎯 Checking if should add to recorded:', {
+            startTimeExists: startTimeRef.current > 0,
+            currentTime,
+            key,
+            alreadyExists: detectionHistoryRef.current.has(key)
+          });
+          
+          if (!detectionHistoryRef.current.has(key)) {
+            detectionHistoryRef.current.add(key);
+            setRecordedDetections(prev => {
+              console.log('📊 Adding detection to recorded:', detection);
+              console.log('📊 Previous recordedDetections length:', prev.length);
+              const newRecorded = [...prev, detection];
+              console.log('📊 New recordedDetections length:', newRecorded.length);
+              
+              // Phát âm thanh thông báo khi detect QR
+              playQRDetectionSound();
+              
+              return newRecorded;
+            });
+          } else {
+            console.log('⚠️ Detection already exists in history, skipping');
+          }
+        } else {
+          console.log('❌ Not adding to recorded because:', {
+            startTimeExists: startTimeRef.current > 0,
+            currentTime,
+            reason: startTimeRef.current <= 0 ? 'recording not started' : 'currentTime is 0'
+          });
+        }
       } else {
         setDetections([]);
       }
     }
 
     requestAnimationFrame(detectQR);
-  }, []);
+  }, []); // Bỏ dependency để tránh stale closure
 
   // Tải danh sách camera
   useEffect(() => {
@@ -133,6 +207,10 @@ const CameraView: React.FC = () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      // Cleanup timer nếu component unmount
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCamera]);
@@ -144,13 +222,28 @@ const CameraView: React.FC = () => {
     const options = { mimeType: 'video/webm;codecs=vp9' };
 
     try {
+      // Đặt startTime và isRecording trước khi tạo recorder
+      startTimeRef.current = Date.now();
+      setIsRecording(true);
+      
+      console.log('🎬 Starting recording at:', startTimeRef.current);
+      console.log('🎬 isRecording will be set to:', true);
+      
       const recorder = new MediaRecorder(stream, options);
       chunksRef.current = [];
       setRecordedDetections([]);
       detectionHistoryRef.current.clear();
       recordingTimeRef.current = 0;
-      startTimeRef.current = Date.now();
-
+      
+      console.log('🔄 Reset recordedDetections and detectionHistory');
+      console.log('🔄 recordedDetections after reset:', []);
+      console.log('🔄 detectionHistory size after clear:', detectionHistoryRef.current.size);
+      
+      // Bắt đầu timer cho recording
+      setRecordingTime(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
@@ -164,7 +257,6 @@ const CameraView: React.FC = () => {
 
       mediaRecorderRef.current = recorder;
       recorder.start(1000); // Collect data every second
-      setIsRecording(true);
 
       // Log detections during recording - track detected QR codes
       const intervalId = setInterval(() => {
@@ -181,24 +273,40 @@ const CameraView: React.FC = () => {
   };
 
   const stopRecording = () => {
+    console.log('🛑 Stopping recording...');
+    console.log('🛑 Current recordedDetections before stop:', recordedDetections);
+    console.log('🛑 recordedDetections length:', recordedDetections.length);
+    
+    // Dừng timer
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
   };
 
-  useEffect(() => {
-    if (isRecording && detections.length > 0) {
-      // Lưu các detections mới khi đang quay
-      detections.forEach(detection => {
-        const key = `${detection.text}_${detection.time}`;
-        if (!detectionHistoryRef.current.has(key)) {
-          detectionHistoryRef.current.add(key);
-          setRecordedDetections(prev => [...prev, detection]);
-        }
-      });
-    }
-  }, [isRecording, detections]);
+  // Không cần useEffect này nữa vì đã xử lý trong detectQR
+  // useEffect(() => {
+  //   if (isRecording && detections.length > 0) {
+  //     console.log('🎬 Recording with detections:', detections);
+  //     // Lưu các detections mới khi đang quay với timestamp chính xác
+  //     detections.forEach(detection => {
+  //       // Sử dụng thời gian đã được tính trong detectQR
+  //       const key = `${detection.text}_${detection.time.toFixed(2)}`;
+  //       if (!detectionHistoryRef.current.has(key)) {
+  //         detectionHistoryRef.current.add(key);
+  //         setRecordedDetections(prev => {
+  //           console.log('📊 Adding detection to recorded:', detection);
+  //           return [...prev, detection];
+  //         });
+  //       }
+  //     });
+  //   }
+  // }, [isRecording, detections]);
 
   const saveVideo = async (blob: Blob) => {
     try {
@@ -212,6 +320,9 @@ const CameraView: React.FC = () => {
         detections: recordedDetections,
         notes: notes,
       };
+
+      console.log('💾 Saving video with metadata:', metadata);
+      console.log('📊 Recorded detections:', recordedDetections);
 
       await window.electronAPI.saveVideo({
         filename,
@@ -306,6 +417,16 @@ const CameraView: React.FC = () => {
                   ⏺️ ĐANG QUAY...
                 </div>
               )}
+              {isRecording && (
+                <div className="text-center bg-red-50 p-2 rounded-lg">
+                  <div className="text-red-700 font-mono text-lg">
+                    ⏱️ {formatTime(recordingTime)}
+                  </div>
+                  <div className="text-xs text-red-500">
+                    Thời gian quay
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -331,6 +452,18 @@ const CameraView: React.FC = () => {
                 </div>
               ) : (
                 <div className="text-gray-400 text-center">Chưa phát hiện QR</div>
+              )}
+              
+              {/* Hiển thị số lượng QR đã ghi lại khi đang quay */}
+              {isRecording && recordedDetections.length > 0 && (
+                <div className="bg-blue-50 p-2 rounded border-l-4 border-blue-400">
+                  <div className="font-semibold text-blue-800">
+                    📊 Đã ghi lại: {recordedDetections.length} QR code
+                  </div>
+                  <div className="text-xs text-blue-600 mt-1">
+                    Mới nhất: {recordedDetections[recordedDetections.length - 1]?.text}
+                  </div>
+                </div>
               )}
             </div>
           </div>
