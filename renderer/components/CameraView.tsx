@@ -29,9 +29,24 @@ const CameraView: React.FC = () => {
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [recordingTime, setRecordingTime] = useState<number>(0);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSoundTimeRef = useRef<number>(0); // Để debounce âm thanh
+  const currentQRRef = useRef<string | null>(null); // QR hiện tại đang được detect
+  const qrStartTimeRef = useRef<{ [qrText: string]: number }>({}); // Thời điểm bắt đầu của mỗi QR
 
-  // Tạo âm thanh thông báo QR detection
+  // Tạo âm thanh thông báo QR detection với debounce
   const playQRDetectionSound = useCallback(() => {
+    const now = Date.now();
+    const timeSinceLastSound = now - lastSoundTimeRef.current;
+    
+    // Chỉ phát âm thanh nếu đã qua 10 giây kể từ lần cuối
+    if (timeSinceLastSound < 10000) {
+      console.log('🔇 Skipping sound - debounce active:', timeSinceLastSound + 'ms ago');
+      return;
+    }
+    
+    lastSoundTimeRef.current = now;
+    console.log('🔊 Playing QR detection sound');
+    
     try {
       // Tạo âm thanh beep đơn giản
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -109,32 +124,54 @@ const CameraView: React.FC = () => {
         
         // Lưu detection khi đang quay (chỉ cần startTimeRef > 0 và currentTime > 0)
         if (startTimeRef.current > 0 && currentTime > 0) {
-          const key = `${detection.text}_${detection.time.toFixed(2)}`;
-          console.log('🎯 Checking if should add to recorded:', {
-            startTimeExists: startTimeRef.current > 0,
-            currentTime,
-            key,
-            alreadyExists: detectionHistoryRef.current.has(key)
-          });
+          // Kiểm tra nếu đây là QR mới khác với QR hiện tại
+          if (currentQRRef.current && currentQRRef.current !== result.data) {
+            console.log('🔄 QR changed from', currentQRRef.current, 'to', result.data);
+            // Kết thúc detection của QR cũ bằng cách không làm gì thêm
+          }
           
-          if (!detectionHistoryRef.current.has(key)) {
-            detectionHistoryRef.current.add(key);
+          // Cập nhật QR hiện tại
+          currentQRRef.current = result.data;
+          
+          // Lưu thời điểm bắt đầu của QR này nếu chưa có
+          if (!qrStartTimeRef.current[result.data]) {
+            qrStartTimeRef.current[result.data] = currentTime;
+            console.log('🆕 First time seeing QR:', result.data, 'at time:', currentTime);
+          }
+          
+          // Chỉ lưu detection đầu tiên của mỗi QR (dựa trên text)
+          const qrKey = result.data; // Chỉ dùng text, không dùng time
+          
+          if (!detectionHistoryRef.current.has(qrKey)) {
+            // Tạo detection với thời gian đầu tiên xuất hiện
+            const firstTimeDetection: QRDetection = {
+              text: result.data,
+              time: qrStartTimeRef.current[result.data], // Dùng thời gian đầu tiên
+              bbox: {
+                x: result.location.topLeftCorner.x,
+                y: result.location.topLeftCorner.y,
+                w: result.location.bottomRightCorner.x - result.location.topLeftCorner.x,
+                h: result.location.bottomRightCorner.y - result.location.topLeftCorner.y,
+              },
+            };
+            
+            detectionHistoryRef.current.add(qrKey);
             setRecordedDetections(prev => {
-              console.log('📊 Adding detection to recorded:', detection);
+              console.log('📊 Adding FIRST detection for QR:', firstTimeDetection);
               console.log('📊 Previous recordedDetections length:', prev.length);
-              const newRecorded = [...prev, detection];
+              const newRecorded = [...prev, firstTimeDetection];
               console.log('📊 New recordedDetections length:', newRecorded.length);
               
               // Cập nhật ref để tránh stale closure
               recordedDetectionsRef.current = newRecorded;
               
-              // Phát âm thanh thông báo khi detect QR
+              // Phát âm thanh thông báo khi detect QR lần đầu
               playQRDetectionSound();
               
               return newRecorded;
             });
           } else {
-            console.log('⚠️ Detection already exists in history, skipping');
+            console.log('⚠️ QR already recorded:', result.data, '- skipping duplicate');
           }
         } else {
           console.log('❌ Not adding to recorded because:', {
@@ -145,6 +182,11 @@ const CameraView: React.FC = () => {
         }
       } else {
         setDetections([]);
+        // Reset QR hiện tại khi không detect được gì
+        if (currentQRRef.current) {
+          console.log('❌ Lost QR detection:', currentQRRef.current);
+          currentQRRef.current = null;
+        }
       }
     }
 
@@ -238,6 +280,8 @@ const CameraView: React.FC = () => {
       setRecordedDetections([]);
       recordedDetectionsRef.current = []; // Reset ref cũng
       detectionHistoryRef.current.clear();
+      currentQRRef.current = null; // Reset QR hiện tại
+      qrStartTimeRef.current = {}; // Reset thời gian bắt đầu của các QR
       recordingTimeRef.current = 0;
       
       console.log('🔄 Reset recordedDetections and detectionHistory');
