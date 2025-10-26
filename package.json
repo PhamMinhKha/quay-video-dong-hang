@@ -19,9 +19,10 @@
   },
   "build": {
     "appId": "com.example.phanmemdonghangg",
-    "productName": "Phần mềm đóng hàng",
+    "productName": "Phan Mem Dong Hang",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/",
@@ -29,6 +30,7 @@
       "node_modules/"
     ],
     "asar": true,
+    "icon": "logo.png",
     "mac": {
       "target": [
         {
@@ -44,7 +46,22 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "icon": "logo.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "logo.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "logo.png",
+      "uninstallerIcon": "logo.png"
     },
     "dmg": {
       "background": "build/dmg-background.png",
@@ -63,7 +80,8 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "icon": "logo.png"
     }
   },
   "dependencies": {
