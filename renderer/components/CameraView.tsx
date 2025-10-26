@@ -24,6 +24,7 @@ const CameraView: React.FC = () => {
   const [recordedDetections, setRecordedDetections] = useState<QRDetection[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const detectionHistoryRef = useRef<Set<string>>(new Set());
+  const recordedDetectionsRef = useRef<QRDetection[]>([]);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [recordingTime, setRecordingTime] = useState<number>(0);
@@ -123,6 +124,9 @@ const CameraView: React.FC = () => {
               console.log('📊 Previous recordedDetections length:', prev.length);
               const newRecorded = [...prev, detection];
               console.log('📊 New recordedDetections length:', newRecorded.length);
+              
+              // Cập nhật ref để tránh stale closure
+              recordedDetectionsRef.current = newRecorded;
               
               // Phát âm thanh thông báo khi detect QR
               playQRDetectionSound();
@@ -232,6 +236,7 @@ const CameraView: React.FC = () => {
       const recorder = new MediaRecorder(stream, options);
       chunksRef.current = [];
       setRecordedDetections([]);
+      recordedDetectionsRef.current = []; // Reset ref cũng
       detectionHistoryRef.current.clear();
       recordingTimeRef.current = 0;
       
@@ -284,6 +289,10 @@ const CameraView: React.FC = () => {
     }
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      // Lưu recordedDetections vào ref để tránh stale closure
+      recordedDetectionsRef.current = recordedDetections;
+      console.log('🔄 Saved to ref - recordedDetectionsRef.current:', recordedDetectionsRef.current);
+      
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
@@ -314,15 +323,21 @@ const CameraView: React.FC = () => {
       const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.webm`;
 
       const arrayBuffer = await blob.arrayBuffer();
+      
+      // Sử dụng recordedDetectionsRef để tránh stale closure
+      const detectionsToSave = recordedDetectionsRef.current;
+      console.log('💾 Using detections from ref:', detectionsToSave);
+      console.log('💾 Detections count:', detectionsToSave.length);
+      
       const metadata: VideoMetadata = {
         video: filename,
         createdAt: now.toISOString(),
-        detections: recordedDetections,
+        detections: detectionsToSave,
         notes: notes,
       };
 
       console.log('💾 Saving video with metadata:', metadata);
-      console.log('📊 Recorded detections:', recordedDetections);
+      console.log('📊 Final recorded detections:', detectionsToSave);
 
       await window.electronAPI.saveVideo({
         filename,
