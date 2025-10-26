@@ -6,6 +6,7 @@ import { initDatabase, insertVideo, insertQRDetections, getAllVideos, deleteVide
 
 let mainWindow: BrowserWindow | null = null;
 
+// Cải thiện khả năng tương thích với M4 và Electron 32
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -15,7 +16,29 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false, // Cho phép file:// protocol
       preload: path.join(__dirname, 'preload.js'),
+      sandbox: false,
+      // Cải thiện cho M4 chip
+      experimentalFeatures: false,
+      // Tối ưu hóa memory cho M4
+      v8CacheOptions: 'code',
+      // Tắt các tính năng có thể gây xung đột trên M4
+      spellcheck: false,
+      backgroundThrottling: false,
     },
+    // Tối ưu hóa cho M4
+    titleBarStyle: 'default',
+    trafficLightPosition: { x: 20, y: 20 },
+    show: false, // Không hiện window ngay lập tức
+    // Cải thiện hiệu suất trên M4
+    useContentSize: true,
+    acceptFirstMouse: true,
+  });
+
+  // Hiện window khi đã ready với delay để tránh crash trên M4
+  mainWindow.once('ready-to-show', () => {
+    setTimeout(() => {
+      mainWindow?.show();
+    }, 100);
   });
 
   // Kiểm tra xem có phải dev mode không
@@ -32,9 +55,35 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Xử lý lỗi để tránh crash trên M4
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('Renderer process gone:', details);
+    // Tự động tạo lại window nếu crash
+    if (mainWindow) {
+      mainWindow.destroy();
+      mainWindow = null;
+      setTimeout(createWindow, 1000);
+    }
+  });
+
+  // Xử lý unresponsive để tránh hang trên M4
+  mainWindow.on('unresponsive', () => {
+    console.warn('Window became unresponsive');
+  });
+
+  mainWindow.on('responsive', () => {
+    console.log('Window became responsive again');
+  });
 }
 
 app.on('ready', async () => {
+  // Cải thiện khả năng tương thích với M4
+  app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor');
+  app.commandLine.appendSwitch('--disable-gpu-sandbox');
+  app.commandLine.appendSwitch('--disable-software-rasterizer');
+  app.commandLine.appendSwitch('--no-sandbox');
+  
   // Tạo thư mục videos nếu chưa có
   const videosDir = path.join(app.getPath('userData'), 'videos');
   try {
