@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import QRTimeline from './QRTimeline';
 
 interface VideoItem {
@@ -13,17 +13,61 @@ const VideoManager: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-  const [timelineVideo, setTimelineVideo] = useState<{path: string, detections: any[]} | null>(null);
+  const [timelineVideo, setTimelineVideo] = useState<{ path: string, detections: any[] } | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     console.log('🔄 VideoManager useEffect - loading videos...');
     loadVideos();
   }, []);
 
+  // Auto scroll to latest video when videos list changes
+  useEffect(() => {
+    if (videos.length > 0 && scrollContainerRef.current) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        scrollToTop();
+      }, 100);
+    }
+  }, [videos]);
+
+  const scrollToTop = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+      console.log('📜 Scrolled to top for latest video');
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+      console.log('📜 Scrolled to bottom');
+    }
+  };
+
   const loadVideos = async () => {
     try {
+      console.log('🔄 Loading videos...');
       const videoList = await window.electronAPI.listVideos();
-      setVideos(videoList);
+      console.log('📹 Raw video list:', videoList);
+      
+      // Sort videos by creation date (newest first)
+      const sortedVideos = videoList.sort((a: VideoItem, b: VideoItem) => 
+        new Date(b.created).getTime() - new Date(a.created).getTime()
+      );
+      
+      console.log('📹 Sorted videos (newest first):', sortedVideos.map(v => ({
+        filename: v.filename,
+        created: v.created
+      })));
+      
+      setVideos(sortedVideos);
     } catch (err) {
       console.error('Error loading videos:', err);
     } finally {
@@ -96,6 +140,20 @@ const VideoManager: React.FC = () => {
         <h2 className="text-xl font-bold">Danh sách Video</h2>
         <div className="flex gap-2">
           <button
+            onClick={scrollToTop}
+            className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
+            title="Scroll lên đầu (Video mới nhất)"
+          >
+            ⬆️ Mới nhất
+          </button>
+          <button
+            onClick={scrollToBottom}
+            className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm"
+            title="Scroll xuống cuối (Video cũ nhất)"
+          >
+            ⬇️ Cũ nhất
+          </button>
+          <button
             onClick={() => console.log('Videos:', videos)}
             className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
           >
@@ -124,8 +182,15 @@ const VideoManager: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-1 gap-4">
+        <div 
+          className="flex-1 overflow-y-auto overflow-x-hidden" 
+          ref={scrollContainerRef}
+          style={{ 
+            maxHeight: 'calc(100vh - 200px)',
+            scrollBehavior: 'smooth'
+          }}
+        >
+          <div className="grid grid-cols-1 gap-4 pb-4">
             {videos.map((video) => (
               <div
                 key={video.filename}
@@ -179,11 +244,10 @@ const VideoManager: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleShowTimeline(video)}
-                      className={`px-4 py-2 rounded-lg text-sm ${
-                        video.metadata?.detections && video.metadata.detections.length > 0
+                      className={`px-4 py-2 rounded-lg text-sm ${video.metadata?.detections && video.metadata.detections.length > 0
                           ? 'bg-green-500 hover:bg-green-600 text-white'
                           : 'bg-gray-400 hover:bg-gray-500 text-white'
-                      }`}
+                        }`}
                       disabled={!video.metadata?.detections || video.metadata.detections.length === 0}
                     >
                       📊 Timeline QR ({video.metadata?.detections?.length || 0})
