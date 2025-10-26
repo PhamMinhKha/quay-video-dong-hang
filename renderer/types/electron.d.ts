@@ -19,6 +19,8 @@ declare global {
       getStoragePath: () => Promise<string>;
       setStoragePath: (path: string) => Promise<{ success: boolean }>;
       selectStorageFolder: () => Promise<string | null>;
+      getDatabasePath: () => Promise<string>;
+      setDatabasePath: (path: string) => Promise<{ success: boolean }>;
       exportQRSegments: (data: { filename: string; detections: any[]; outputDir: string }) => Promise<{
         success: boolean;
         exportedSegments?: Array<{

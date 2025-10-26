@@ -120,7 +120,27 @@ ipcMain.handle('get-videos-dir', () => {
 });
 
 ipcMain.handle('save-video', async (_, { filename, buffer, metadata }) => {
-  const videosDir = path.join(app.getPath('userData'), 'videos');
+  // Sử dụng storage path từ config
+  let videosDir: string;
+  try {
+    // Đọc từ config nếu có
+    const configFile = path.join(app.getPath('userData'), 'config.json');
+    try {
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      videosDir = config.storagePath || path.join(app.getPath('userData'), 'videos');
+    } catch {
+      // Chưa có config, dùng mặc định
+      videosDir = path.join(app.getPath('userData'), 'videos');
+    }
+  } catch (err) {
+    console.error('Error getting storage path:', err);
+    videosDir = path.join(app.getPath('userData'), 'videos');
+  }
+  
+  // Tạo thư mục nếu chưa có
+  await fs.mkdir(videosDir, { recursive: true });
+  
   const videoPath = path.join(videosDir, filename);
   const metadataPath = videoPath.replace(/\.[^.]+$/, '.json');
   
@@ -273,11 +293,71 @@ ipcMain.handle('get-storage-path', async () => {
 });
 
 ipcMain.handle('set-storage-path', async (_, newPath) => {
-  // Lưu cấu hình vào file
-  const configFile = path.join(app.getPath('userData'), 'config.json');
-  const config = { storagePath: newPath };
-  await fs.writeFile(configFile, JSON.stringify(config, null, 2));
-  return { success: true };
+  try {
+    // Đọc config hiện tại
+    const configFile = path.join(app.getPath('userData'), 'config.json');
+    let config: any = {};
+    try {
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      config = JSON.parse(configContent);
+    } catch {
+      // Chưa có config, tạo mới
+    }
+    
+    // Cập nhật storage path
+    config.storagePath = newPath;
+    await fs.writeFile(configFile, JSON.stringify(config, null, 2));
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error setting storage path:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Database path handlers
+ipcMain.handle('get-database-path', async () => {
+  try {
+    // Đọc từ config nếu có
+    const configFile = path.join(app.getPath('userData'), 'config.json');
+    try {
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      if (config.databasePath) {
+        return config.databasePath;
+      }
+    } catch {
+      // Chưa có config, dùng mặc định
+    }
+    
+    // Mặc định
+    const defaultPath = app.getPath('userData');
+    return defaultPath;
+  } catch (err: any) {
+    console.error('Error getting database path:', err);
+    return app.getPath('userData');
+  }
+});
+
+ipcMain.handle('set-database-path', async (_, newPath) => {
+  try {
+    // Đọc config hiện tại
+    const configFile = path.join(app.getPath('userData'), 'config.json');
+    let config: any = {};
+    try {
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      config = JSON.parse(configContent);
+    } catch {
+      // Chưa có config, tạo mới
+    }
+    
+    // Cập nhật database path
+    config.databasePath = newPath;
+    await fs.writeFile(configFile, JSON.stringify(config, null, 2));
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error setting database path:', err);
+    return { success: false, error: err.message };
+  }
 });
 
 ipcMain.handle('select-storage-folder', async () => {

@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showInFolder: (filePath: string) => ipcRenderer.invoke('show-in-folder', filePath),
   getStoragePath: () => ipcRenderer.invoke('get-storage-path'),
   setStoragePath: (path: string) => ipcRenderer.invoke('set-storage-path', path),
+  getDatabasePath: () => ipcRenderer.invoke('get-database-path'),
+  setDatabasePath: (path: string) => ipcRenderer.invoke('set-database-path', path),
   selectStorageFolder: () => ipcRenderer.invoke('select-storage-folder'),
   exportQRSegments: (data: { filename: string; detections: any[]; outputDir: string }) =>
     ipcRenderer.invoke('export-qr-segments', data),

@@ -1,11 +1,38 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
+import * as fs from 'fs';
 import { app } from 'electron';
 
 let db: Database.Database | null = null;
 
+function getDatabasePath(): string {
+  try {
+    // Đọc từ config nếu có
+    const configFile = path.join(app.getPath('userData'), 'config.json');
+    if (fs.existsSync(configFile)) {
+      const configContent = fs.readFileSync(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      if (config.databasePath) {
+        return path.join(config.databasePath, 'database.db');
+      }
+    }
+  } catch (err) {
+    console.error('Error reading database config:', err);
+  }
+  
+  // Mặc định
+  return path.join(app.getPath('userData'), 'database.db');
+}
+
 export function initDatabase() {
-  const dbPath = path.join(app.getPath('userData'), 'database.db');
+  const dbPath = getDatabasePath();
+  
+  // Tạo thư mục nếu chưa có
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  
   db = new Database(dbPath);
 
   // Tạo bảng videos
@@ -40,7 +67,7 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_video_id ON qr_detections(video_id)
   `);
 
-  console.log('✅ Database initialized');
+  console.log('✅ Database initialized at:', dbPath);
   return db;
 }
 
