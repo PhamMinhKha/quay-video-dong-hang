@@ -110,7 +110,7 @@
     }
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.4.1",
     "jsqr": "^1.4.0"
   },
   "devDependencies": {

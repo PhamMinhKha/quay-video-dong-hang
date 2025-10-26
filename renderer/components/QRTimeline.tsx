@@ -141,7 +141,11 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
     setTimeout(checkAndFixDuration, 500);
   }, [actualVideoPath]);
 
-  // Thêm functions cho selection
+  // Thêm state cho drag detection
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+
+  // Thêm functions cho selection và seeking
   const handleProgressBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return;
 
@@ -149,23 +153,48 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
     const clickX = e.clientX - rect.left;
     const clickTime = (clickX / rect.width) * duration;
 
+    // Lưu vị trí bắt đầu drag
+    setDragStartX(clickX);
+    setIsDragging(false);
+
     setSelectionStart(clickTime);
     setSelectionEnd(clickTime);
     setIsSelecting(true);
   };
 
   const handleProgressBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isSelecting || !duration || selectionStart === null) return;
+    if (!isSelecting || !duration || selectionStart === null || dragStartX === null) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const moveX = e.clientX - rect.left;
     const moveTime = (moveX / rect.width) * duration;
 
+    // Kiểm tra nếu đã drag đủ xa (threshold 5px)
+    if (Math.abs(moveX - dragStartX) > 5) {
+      setIsDragging(true);
+    }
+
     setSelectionEnd(moveTime);
   };
 
-  const handleProgressBarMouseUp = () => {
+  const handleProgressBarMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickTime = (clickX / rect.width) * duration;
+
+    // Nếu không drag (chỉ click), thực hiện seek
+    if (!isDragging && dragStartX !== null && Math.abs(clickX - dragStartX) <= 5) {
+      console.log(`🎯 Seeking to time: ${formatTime(clickTime)}`);
+      jumpToTime(clickTime);
+      // Clear selection khi seek
+      clearSelection();
+    }
+
     setIsSelecting(false);
+    setIsDragging(false);
+    setDragStartX(null);
   };
 
   const clearSelection = () => {
@@ -535,6 +564,97 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
                 });
               }}
             />
+
+            {/* Timeline với tính năng seek */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Timeline</span>
+                <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+                  {selectionStart !== null && selectionEnd !== null && (
+                    <span className="text-blue-600">
+                      Đã chọn: {formatTime(Math.min(selectionStart, selectionEnd))} - {formatTime(Math.max(selectionStart, selectionEnd))}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Progress Bar với seek và selection */}
+              <div 
+                className="relative h-8 bg-gray-200 rounded-lg cursor-pointer select-none"
+                onMouseDown={handleProgressBarMouseDown}
+                onMouseMove={handleProgressBarMouseMove}
+                onMouseUp={handleProgressBarMouseUp}
+                onMouseLeave={() => {
+                  setIsSelecting(false);
+                  setIsDragging(false);
+                  setDragStartX(null);
+                }}
+              >
+                {/* Background track */}
+                <div className="absolute inset-0 bg-gray-300 rounded-lg"></div>
+                
+                {/* Current time indicator */}
+                <div 
+                  className="absolute top-0 h-full bg-blue-500 rounded-lg transition-all duration-100"
+                  style={{ width: `${getCurrentTimelinePosition()}%` }}
+                ></div>
+                
+                {/* Selection area */}
+                {selectionStart !== null && selectionEnd !== null && (
+                  <div 
+                    className="absolute top-0 h-full bg-yellow-400 bg-opacity-50 border-2 border-yellow-500"
+                    style={{
+                      left: `${Math.min(getTimelinePosition(selectionStart), getTimelinePosition(selectionEnd))}%`,
+                      width: `${Math.abs(getTimelinePosition(selectionEnd) - getTimelinePosition(selectionStart))}%`
+                    }}
+                  ></div>
+                )}
+                
+                {/* QR Detection markers */}
+                {detections.map((detection, index) => (
+                  <div
+                    key={index}
+                    className="absolute top-0 w-1 h-full bg-red-500 cursor-pointer hover:bg-red-600 transition-colors"
+                    style={{ left: `${getTimelinePosition(detection.time)}%` }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      jumpToTime(detection.time);
+                    }}
+                    title={`QR: ${detection.text} tại ${formatTime(detection.time)}`}
+                  ></div>
+                ))}
+                
+                {/* Current time cursor */}
+                <div 
+                  className="absolute top-0 w-0.5 h-full bg-white shadow-lg pointer-events-none"
+                  style={{ left: `${getCurrentTimelinePosition()}%` }}
+                ></div>
+              </div>
+              
+              {/* Timeline controls */}
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={clearSelection}
+                    className="px-2 py-1 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50"
+                    disabled={selectionStart === null && selectionEnd === null}
+                  >
+                    Xóa vùng chọn
+                  </button>
+                  <button
+                    onClick={handleExportSelectedSegment}
+                    className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+                    disabled={selectionStart === null || selectionEnd === null || isExporting}
+                  >
+                    {isExporting ? 'Đang export...' : 'Export đoạn đã chọn'}
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500">
+                  💡 Click để seek, kéo để chọn đoạn video
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* QR List - Right Side */}
@@ -566,83 +686,6 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Timeline Bar - Bottom */}
-        <div className="p-4 border-t bg-gray-50">
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="font-semibold text-sm">Timeline</h4>
-            <div className="flex gap-2">
-              {(selectionStart !== null && selectionEnd !== null) && (
-                <>
-                  <span className="text-xs text-gray-600">
-                    Đã chọn: {formatTime(Math.min(selectionStart, selectionEnd))} - {formatTime(Math.max(selectionStart, selectionEnd))}
-                  </span>
-                  <button
-                    onClick={handleExportSelectedSegment}
-                    disabled={isExporting}
-                    className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50"
-                  >
-                    {isExporting ? '⏳ Đang export...' : '📤 Export đoạn'}
-                  </button>
-                  <button
-                    onClick={clearSelection}
-                    className="px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600"
-                  >
-                    ✖️
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Timeline Bar */}
-          <div
-            className="relative bg-gray-200 rounded-lg h-6 mb-2 cursor-crosshair"
-            onMouseDown={handleProgressBarMouseDown}
-            onMouseMove={handleProgressBarMouseMove}
-            onMouseUp={handleProgressBarMouseUp}
-            onMouseLeave={handleProgressBarMouseUp}
-          >
-            {/* Selection Area */}
-            {selectionStart !== null && selectionEnd !== null && (
-              <div
-                className="absolute top-0 h-full bg-yellow-300 bg-opacity-50 border border-yellow-500"
-                style={{
-                  left: `${Math.min((selectionStart / duration) * 100, (selectionEnd / duration) * 100)}%`,
-                  width: `${Math.abs((selectionEnd - selectionStart) / duration) * 100}%`
-                }}
-              />
-            )}
-
-            {/* Current Time Indicator */}
-            <div
-              className="absolute top-0 h-full w-1 bg-red-500 z-10"
-              style={{ left: `${getCurrentTimelinePosition()}%` }}
-            />
-
-            {/* QR Code Markers */}
-            {detections.map((detection, index) => (
-              <div
-                key={index}
-                className="absolute top-0 h-full w-2 bg-blue-500 cursor-pointer hover:bg-blue-600 transition-colors z-20"
-                style={{ left: `${(detection.time / duration) * 100}%` }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  jumpToTime(detection.time);
-                }}
-                title={`${detection.text} - ${formatTime(detection.time)}`}
-              />
-            ))}
-          </div>
-
-          {/* Time Display */}
-          <div className="text-sm text-gray-600 text-center">
-            {formatTime(currentTime)} / {formatTime(duration)}
-            <div className="text-xs text-gray-500 mt-1">
-              Debug: duration={duration}, currentTime={currentTime}, isFinite(duration)={isFinite(duration)}
             </div>
           </div>
         </div>
