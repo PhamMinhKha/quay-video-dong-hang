@@ -14,6 +14,9 @@
     "build:renderer": "vite build",
     "build:main": "tsc -p main/tsconfig.json && tsc -p main/tsconfig.main.json && tsc -p main/tsconfig.database.json && node fix_preload.js",
     "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:all": "npm run build && electron-builder --mac --win",
     "start": "electron .",
     "pack": "electron-builder --dir"
   },
@@ -50,8 +53,33 @@
       "icon": "logo.png"
     },
     "win": {
-      "target": "nsis",
-      "icon": "logo.png"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        }
+      ],
+      "icon": "logo.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "publisherName": "Phạm Minh Kha",
+      "requestedExecutionLevel": "asInvoker"
     },
     "linux": {
       "target": "AppImage",
