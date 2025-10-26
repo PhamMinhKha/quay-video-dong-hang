@@ -76,7 +76,6 @@
           ]
         }
       ],
-      "icon": "logo.png",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "publisherName": "Phạm Minh Kha",
       "requestedExecutionLevel": "asInvoker"
@@ -87,9 +86,7 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerIcon": "logo.png",
-      "uninstallerIcon": "logo.png"
+      "allowToChangeInstallationDirectory": true
     },
     "dmg": {
       "background": "build/dmg-background.png",
