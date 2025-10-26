@@ -430,12 +430,12 @@ const CameraView: React.FC = () => {
       {/* Video Preview Section */}
       <div className="flex-1 flex gap-4 p-4">
         <div className="flex-1 flex flex-col">
-          <div className="relative bg-black rounded-lg overflow-hidden shadow-lg">
+          <div className="relative bg-black rounded-lg overflow-hidden shadow-lg" style={{ height: '400px' }}>
             <video
               ref={videoRef}
               autoPlay
               playsInline
-              className="w-full h-auto"
+              className="w-full h-full object-cover"
             />
             <canvas
               ref={canvasRef}
