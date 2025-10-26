@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRTimeline from './QRTimeline';
 
 const SearchByQR: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [timelineVideo, setTimelineVideo] = useState<{path: string, detections: any[]} | null>(null);
 
   const handleSearch = async () => {
-    if (!searchText.trim()) return;
+    if (!searchText.trim()) {
+      setResults([]);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -21,9 +26,51 @@ const SearchByQR: React.FC = () => {
     }
   };
 
+  // Auto search when searchText changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      handleSearch();
+    }, 500); // Debounce 500ms
+
+    return () => clearTimeout(timeoutId);
+  }, [searchText]);
+
   const handlePlayVideo = async (filename: string) => {
     const videoPath = await window.electronAPI.getVideoPath(filename);
     setSelectedVideo(videoPath);
+  };
+
+  const handleShowTimeline = (video: any) => {
+    if (video.metadata?.detections && video.metadata.detections.length > 0) {
+      setTimelineVideo({
+        path: video.path,
+        detections: video.metadata.detections
+      });
+    }
+  };
+
+  const handleShowLocation = async (filePath: string) => {
+    try {
+      await window.electronAPI.showInFolder(filePath);
+    } catch (err) {
+      console.error('Error showing file location:', err);
+      alert('Lỗi khi mở vị trí file!');
+    }
+  };
+
+  const handleDelete = async (filename: string) => {
+    if (!confirm(`Bạn có chắc muốn xóa video: ${filename}?`)) return;
+
+    try {
+      await window.electronAPI.deleteVideo(filename);
+      // Refresh search results
+      if (searchText.trim()) {
+        handleSearch();
+      }
+    } catch (err) {
+      console.error('Error deleting video:', err);
+      alert('Lỗi khi xóa video!');
+    }
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -130,18 +177,63 @@ const SearchByQR: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => handlePlayVideo(video.filename)}
-                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold"
-                  >
-                    ▶️ Phát Video
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        console.log('🎬 Video clicked:', video);
+                        console.log('📊 Metadata:', video.metadata);
+                        console.log('🔍 Detections:', video.metadata?.detections);
+                        console.log('📝 Notes:', video.metadata?.notes);
+                      }}
+                      className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-xs"
+                    >
+                      🐛 Debug Video
+                    </button>
+                    <button
+                      onClick={() => handleShowTimeline(video)}
+                      className={`px-4 py-2 rounded-lg text-sm ${
+                        video.metadata?.detections && video.metadata.detections.length > 0
+                          ? 'bg-green-500 hover:bg-green-600 text-white'
+                          : 'bg-gray-400 hover:bg-gray-500 text-white'
+                      }`}
+                      disabled={!video.metadata?.detections || video.metadata.detections.length === 0}
+                    >
+                      📊 Timeline QR ({video.metadata?.detections?.length || 0})
+                    </button>
+                    <button
+                      onClick={() => handleShowLocation(video.path)}
+                      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm"
+                    >
+                      📁 Mở vị trí
+                    </button>
+                    <button
+                      onClick={() => handlePlayVideo(video.filename)}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
+                    >
+                      ▶️ Phát Video
+                    </button>
+                    <button
+                      onClick={() => handleDelete(video.filename)}
+                      className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
+                    >
+                      🗑️ Xóa
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* QR Timeline Modal */}
+      {timelineVideo && (
+        <QRTimeline
+          videoPath={timelineVideo.path}
+          detections={timelineVideo.detections}
+          onClose={() => setTimelineVideo(null)}
+        />
+      )}
     </div>
   );
 };
