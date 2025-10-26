@@ -265,7 +265,28 @@ const CameraView: React.FC = () => {
     if (!videoRef.current) return;
 
     const stream = videoRef.current.srcObject as MediaStream;
-    const options = { mimeType: 'video/webm;codecs=vp9' };
+    
+    // Thử các format MP4 trước, fallback về WebM nếu không support
+    let options: MediaRecorderOptions;
+    let fileExtension: string;
+    
+    if (MediaRecorder.isTypeSupported('video/mp4')) {
+      options = { mimeType: 'video/mp4' };
+      fileExtension = 'mp4';
+      console.log('🎬 Using MP4 format');
+    } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+      options = { mimeType: 'video/mp4;codecs=avc1' };
+      fileExtension = 'mp4';
+      console.log('🎬 Using MP4 with AVC1 codec');
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+      options = { mimeType: 'video/webm;codecs=h264' };
+      fileExtension = 'webm';
+      console.log('🎬 Using WebM with H264 codec');
+    } else {
+      options = { mimeType: 'video/webm;codecs=vp9' };
+      fileExtension = 'webm';
+      console.log('🎬 Fallback to WebM with VP9 codec');
+    }
 
     try {
       // Đặt startTime và isRecording trước khi tạo recorder
@@ -300,8 +321,8 @@ const CameraView: React.FC = () => {
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        await saveVideo(blob);
+        const blob = new Blob(chunksRef.current, { type: options.mimeType });
+        await saveVideo(blob, fileExtension);
       };
 
       mediaRecorderRef.current = recorder;
@@ -361,10 +382,10 @@ const CameraView: React.FC = () => {
   //   }
   // }, [isRecording, detections]);
 
-  const saveVideo = async (blob: Blob) => {
+  const saveVideo = async (blob: Blob, extension: string = 'webm') => {
     try {
       const now = new Date();
-      const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.webm`;
+      const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}.${extension}`;
 
       const arrayBuffer = await blob.arrayBuffer();
       

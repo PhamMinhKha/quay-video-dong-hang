@@ -22,6 +22,13 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [actualVideoPath, setActualVideoPath] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // Thêm state cho selection
+  const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
 
   // Debug log để kiểm tra detections
   useEffect(() => {
@@ -35,47 +42,305 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
     });
   }, [detections]);
 
+  // Lấy đường dẫn video chính xác
+  useEffect(() => {
+    const getCorrectVideoPath = async () => {
+      try {
+        console.log('🎬 Original videoPath:', videoPath);
+        // Lấy filename từ path
+        const filename = videoPath.split('/').pop() || videoPath.split('\\').pop() || '';
+        console.log('📁 Extracted filename:', filename);
+        
+        if (filename) {
+          const correctPath = await window.electronAPI.getVideoPath(filename);
+          console.log('✅ Correct video path:', correctPath);
+          setActualVideoPath(correctPath);
+          
+          // Force video reload sau khi có path mới
+          setTimeout(() => {
+            const video = videoRef.current;
+            if (video) {
+              console.log('🔄 Force reload video with new path');
+              video.load(); // Force reload video
+            }
+          }, 100);
+        }
+      } catch (error) {
+        console.error('❌ Error getting video path:', error);
+        // Fallback to original path
+        setActualVideoPath(videoPath);
+        
+        // Force video reload với fallback path
+        setTimeout(() => {
+          const video = videoRef.current;
+          if (video) {
+            console.log('🔄 Force reload video with fallback path');
+            video.load();
+          }
+        }, 100);
+      }
+    };
+
+    if (videoPath) {
+      getCorrectVideoPath();
+    }
+  }, [videoPath]);
+
+  // Fix cho WebM files không có duration metadata - seek to end để lấy duration
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !actualVideoPath) return;
 
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
-    const handleLoadedMetadata = () => setDuration(video.duration);
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
+    console.log('🎯 WebM duration fix - seeking to end to get duration...');
+    
+    const getDurationBySeek = async () => {
+      return new Promise<number>((resolve) => {
+        const originalTime = video.currentTime;
+        
+        const onSeeked = () => {
+          const totalDuration = video.currentTime;
+          console.log('✅ Got duration by seeking:', totalDuration);
+          
+          // Quay lại thời gian ban đầu
+          video.currentTime = originalTime;
+          video.removeEventListener('seeked', onSeeked);
+          resolve(totalDuration);
+        };
+        
+        video.addEventListener('seeked', onSeeked);
+        
+        // Seek đến một thời gian rất lớn (video sẽ tự động dừng ở cuối)
+        video.currentTime = 999999;
+      });
     };
-  }, []);
+
+    const checkAndFixDuration = async () => {
+      // Đợi video load
+      if (video.readyState < 2) {
+        setTimeout(checkAndFixDuration, 100);
+        return;
+      }
+      
+      if (video.duration && isFinite(video.duration) && video.duration > 0) {
+        console.log('✅ Duration already available:', video.duration);
+        setDuration(video.duration);
+      } else {
+        console.log('⚠️ No duration metadata, using seek method...');
+        try {
+          const seekDuration = await getDurationBySeek();
+          if (seekDuration > 0) {
+            setDuration(seekDuration);
+          }
+        } catch (error) {
+          console.error('❌ Failed to get duration by seek:', error);
+        }
+      }
+    };
+
+    // Bắt đầu check sau khi video load
+    setTimeout(checkAndFixDuration, 500);
+  }, [actualVideoPath]);
+
+  // Thêm functions cho selection
+  const handleProgressBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickTime = (clickX / rect.width) * duration;
+    
+    setSelectionStart(clickTime);
+    setSelectionEnd(clickTime);
+    setIsSelecting(true);
+  };
+
+  const handleProgressBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isSelecting || !duration || selectionStart === null) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const moveX = e.clientX - rect.left;
+    const moveTime = (moveX / rect.width) * duration;
+    
+    setSelectionEnd(moveTime);
+  };
+
+  const handleProgressBarMouseUp = () => {
+    setIsSelecting(false);
+  };
+
+  const clearSelection = () => {
+    setSelectionStart(null);
+    setSelectionEnd(null);
+    setIsSelecting(false);
+  };
+
+  // Export selected segment
+  const handleExportSelectedSegment = async () => {
+    if (selectionStart === null || selectionEnd === null) {
+      alert('Vui lòng chọn đoạn video trước khi export!');
+      return;
+    }
+
+    const startTime = Math.min(selectionStart, selectionEnd);
+    const endTime = Math.max(selectionStart, selectionEnd);
+    
+    if (endTime - startTime < 0.1) {
+      alert('Đoạn video được chọn quá ngắn!');
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      
+      console.log('🎬 Starting export process...');
+      console.log('📁 Video path:', actualVideoPath);
+      console.log('⏱️ Start time:', startTime, 'End time:', endTime);
+      
+      // Chọn thư mục output
+      const outputDir = await window.electronAPI.selectStorageFolder();
+      if (!outputDir) {
+        console.log('❌ User cancelled folder selection');
+        setIsExporting(false);
+        return;
+      }
+      
+      console.log('📂 Output directory:', outputDir);
+
+      // Lấy tên file gốc
+      const originalFilename = actualVideoPath.split('/').pop()?.split('.')[0] || 'segment';
+      const outputFilename = `${originalFilename}_${formatTime(startTime)}-${formatTime(endTime)}.mp4`.replace(/:/g, '-');
+      
+      console.log('📄 Output filename:', outputFilename);
+
+      // Export segment
+      console.log('🚀 Calling exportVideoSegment API...');
+      const result = await window.electronAPI.exportVideoSegment({
+        inputPath: actualVideoPath,
+        outputDir,
+        outputFilename,
+        startTime,
+        endTime
+      });
+      
+      console.log('📊 Export result:', result);
+
+      if (result.success) {
+        console.log('✅ Export successful!');
+        alert(`✅ Export thành công!\nFile: ${outputFilename}`);
+        
+        // Mở thư mục chứa file
+        try {
+          const showResult = await window.electronAPI.showInFolder(`${outputDir}/${outputFilename}`);
+          if (!showResult.success && showResult.error) {
+            console.error('Error opening folder:', showResult.error);
+          }
+        } catch (error) {
+          console.error('Error opening output folder:', error);
+        }
+        
+        clearSelection();
+      } else {
+        console.error('❌ Export failed:', result.error);
+        alert(`❌ Export thất bại: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Export error details:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      alert(`❌ Có lỗi xảy ra khi export video!\nChi tiết: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const jumpToTime = (time: number) => {
     const video = videoRef.current;
     if (video) {
+      console.log(`🎯 Jumping to time: ${formatTime(time)}`);
       video.currentTime = time;
+      // Ensure video plays after jumping
+      if (video.paused) {
+        video.play().catch(err => {
+          console.error('Error playing video after jump:', err);
+        });
+      }
+    } else {
+      console.error('❌ Video ref not available for jumping to time');
     }
   };
 
   const formatTime = (seconds: number): string => {
+    if (!isFinite(seconds) || isNaN(seconds)) {
+      return '0:00';
+    }
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getTimelinePosition = (time: number): number => {
-    return duration > 0 ? (time / duration) * 100 : 0;
+    if (!isFinite(time) || isNaN(time) || !isFinite(duration) || isNaN(duration) || duration <= 0) {
+      return 0;
+    }
+    return (time / duration) * 100;
   };
 
   const getCurrentTimelinePosition = (): number => {
-    return duration > 0 ? (currentTime / duration) * 100 : 0;
+    if (!isFinite(currentTime) || isNaN(currentTime) || !isFinite(duration) || isNaN(duration) || duration <= 0) {
+      return 0;
+    }
+    return (currentTime / duration) * 100;
+  };
+
+  const handleExportSegments = async () => {
+    if (detections.length === 0) {
+      alert('Không có QR code nào để export!');
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      
+      // Chọn thư mục output
+      const outputDir = await window.electronAPI.selectStorageFolder();
+      if (!outputDir) {
+        setIsExporting(false);
+        return;
+      }
+
+      // Lấy filename từ videoPath
+      const filename = videoPath.split('/').pop() || videoPath.split('\\').pop() || 'unknown.webm';
+      
+      console.log('🎬 Starting export with:', { filename, detections: detections.length, outputDir });
+      
+      const result = await window.electronAPI.exportQRSegments({
+        filename,
+        detections,
+        outputDir
+      });
+
+      if (result.success) {
+        alert(`✅ Export thành công!\n\nĐã tạo ${result.exportedSegments?.length} video segments tại:\n${result.outputDir}\n\nCác file:\n${result.exportedSegments?.map(s => s.filename).join('\n')}`);
+        
+        // Mở thư mục output
+        if (result.outputDir) {
+          try {
+            const showResult = await window.electronAPI.showInFolder(result.outputDir);
+            if (!showResult.success) {
+              console.warn('Could not open folder:', showResult.error);
+            }
+          } catch (error) {
+            console.warn('Error opening folder:', error);
+          }
+        }
+      } else {
+        alert(`❌ Export thất bại:\n${result.error}`);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert(`❌ Lỗi khi export: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -84,74 +349,209 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-xl font-bold">📹 Timeline QR Code</h3>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-          >
-            ✕ Đóng
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportSegments}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={detections.length === 0 || isExporting}
+            >
+              {isExporting ? '⏳ Đang export...' : '📤 Export QR Segments'}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+            >
+              ✕ Đóng
+            </button>
+          </div>
         </div>
 
-        {/* Video Player */}
-        <div className="p-4">
-          <video
-            ref={videoRef}
-            src={`file://${videoPath}`}
-            controls
-            className="w-full rounded-lg"
-            preload="metadata"
-          />
-        </div>
-
-        {/* Timeline */}
-        <div className="p-4 border-t bg-gray-50">
-          <div className="mb-4">
-            <h4 className="font-semibold mb-2">Timeline QR Code ({detections.length} mã)</h4>
-            
-            {/* Timeline Bar */}
-            <div className="relative bg-gray-200 rounded-lg h-8 mb-4">
-              {/* Current Time Indicator */}
-              <div
-                className="absolute top-0 h-full w-1 bg-red-500 z-10"
-                style={{ left: `${getCurrentTimelinePosition()}%` }}
-              />
-              
-              {/* QR Code Markers */}
-              {detections.map((detection, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => jumpToTime(detection.time)}
-                  className="absolute top-1 h-6 w-6 bg-blue-500 rounded-full hover:bg-blue-600 transition-colors z-20 flex items-center justify-center text-white text-xs font-bold"
-                  style={{ left: `${getTimelinePosition(detection.time)}%`, transform: 'translateX(-50%)' }}
-                  title={`${detection.text} - ${formatTime(detection.time)}`}
-                >
-                  {idx + 1}
-                </button>
-              ))}
+        {/* Main Content - Split Layout */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Video Player - Left Side */}
+          <div className="w-2/3 p-4">
+            {/* Debug Info */}
+            <div className="mb-2 p-2 bg-gray-100 rounded text-sm">
+              <div>Duration: {duration} (isFinite: {isFinite(duration).toString()})</div>
+              <div>Current Time: {currentTime}</div>
+              <div>Video Path: {actualVideoPath}</div>
+              <button 
+                onClick={() => {
+                   const video = videoRef.current;
+                   if (video) {
+                     console.log('🔍 Manual video check:', {
+                       src: video.src,
+                       duration: video.duration,
+                       readyState: video.readyState,
+                       networkState: video.networkState,
+                       videoWidth: video.videoWidth,
+                       videoHeight: video.videoHeight,
+                       paused: video.paused,
+                       ended: video.ended,
+                       currentTime: video.currentTime
+                     });
+                     
+                     // Force get duration từ video element
+                     const videoDuration = video.duration;
+                     console.log('🎯 Raw video duration:', videoDuration, 'isFinite:', isFinite(videoDuration));
+                     
+                     if (videoDuration && isFinite(videoDuration) && videoDuration > 0) {
+                       console.log('✅ Manually setting duration:', videoDuration);
+                       setDuration(videoDuration);
+                     } else {
+                       console.log('🔄 Duration not available, checking video state...');
+                       
+                       // Nếu video đang play và có currentTime > 0, thử seek để trigger metadata
+                       if (video.currentTime > 0) {
+                         console.log('🔄 Video has currentTime, trying to get duration...');
+                         video.currentTime = video.currentTime; // Force refresh
+                         
+                         setTimeout(() => {
+                           const newDuration = video.duration;
+                           console.log('🎯 Duration after seek:', newDuration);
+                           if (newDuration && isFinite(newDuration) && newDuration > 0) {
+                             console.log('✅ Got duration after seek:', newDuration);
+                             setDuration(newDuration);
+                           }
+                         }, 100);
+                       } else {
+                         console.log('🔄 Manually loading video...');
+                         video.load();
+                       }
+                     }
+                   }
+                 }}
+                className="ml-2 px-2 py-1 bg-blue-500 text-white rounded text-xs"
+              >
+                Debug Video
+              </button>
             </div>
+            
+            <video
+              ref={videoRef}
+              src={actualVideoPath ? `file://${actualVideoPath}` : ''}
+              controls
+              className="w-full h-auto max-h-[60vh] rounded-lg"
+              preload="auto"
+              onLoadStart={(e) => {
+                console.log('🔄 Video onLoadStart inline:', {
+                  src: (e.target as HTMLVideoElement).src,
+                  readyState: (e.target as HTMLVideoElement).readyState,
+                  networkState: (e.target as HTMLVideoElement).networkState
+                });
+                setDuration(0); // Reset duration
+              }}
+              onLoadedMetadata={(e) => {
+                const video = e.target as HTMLVideoElement;
+                console.log('🎯 Video onLoadedMetadata inline:', {
+                  duration: video.duration,
+                  readyState: video.readyState,
+                  src: video.src,
+                  videoWidth: video.videoWidth,
+                  videoHeight: video.videoHeight
+                });
+                if (video && isFinite(video.duration) && video.duration > 0) {
+                  console.log('✅ Setting duration from onLoadedMetadata:', video.duration);
+                  setDuration(video.duration);
+                } else {
+                  console.warn('⚠️ Duration not available in onLoadedMetadata, trying to get it manually...');
+                  // Thử lấy duration sau một khoảng thời gian ngắn
+                  setTimeout(() => {
+                    if (video.duration && isFinite(video.duration) && video.duration > 0) {
+                      console.log('✅ Got duration after timeout:', video.duration);
+                      setDuration(video.duration);
+                    }
+                  }, 100);
+                }
+              }}
+              onLoadedData={(e) => {
+                const video = e.target as HTMLVideoElement;
+                console.log('🎯 Video onLoadedData inline:', {
+                  duration: video.duration,
+                  readyState: video.readyState,
+                  buffered: video.buffered.length > 0 ? video.buffered.end(0) : 0
+                });
+                if (video && isFinite(video.duration) && video.duration > 0) {
+                  console.log('✅ Setting duration from onLoadedData:', video.duration);
+                  setDuration(video.duration);
+                } else {
+                  console.warn('⚠️ Duration not available in onLoadedData');
+                }
+              }}
+              onCanPlay={(e) => {
+                const video = e.target as HTMLVideoElement;
+                console.log('🎯 Video onCanPlay inline:', {
+                  duration: video.duration,
+                  readyState: video.readyState,
+                  paused: video.paused
+                });
+                if (video && isFinite(video.duration) && video.duration > 0) {
+                  console.log('✅ Setting duration from onCanPlay:', video.duration);
+                  setDuration(video.duration);
+                } else {
+                  console.warn('⚠️ Duration not available in onCanPlay');
+                }
+              }}
+              onDurationChange={(e) => {
+                const video = e.target as HTMLVideoElement;
+                console.log('⏱️ Video onDurationChange inline:', {
+                  duration: video.duration,
+                  readyState: video.readyState
+                });
+                if (video && isFinite(video.duration) && video.duration > 0) {
+                  console.log('✅ Setting duration from onDurationChange:', video.duration);
+                  setDuration(video.duration);
+                } else {
+                  console.warn('⚠️ Duration not available in onDurationChange');
+                }
+              }}
+              onTimeUpdate={(e) => {
+                const video = e.target as HTMLVideoElement;
+                setCurrentTime(video.currentTime);
+                
+                // Nếu duration vẫn là 0 nhưng video đang play, thử lấy duration
+                if (duration === 0 && video.duration && isFinite(video.duration) && video.duration > 0) {
+                  console.log('🎯 Got duration from timeupdate:', video.duration);
+                  setDuration(video.duration);
+                }
+              }}
+              onError={(e) => {
+                console.error('❌ Video onError inline:', e);
+                const video = e.target as HTMLVideoElement;
+                if (video?.error) {
+                  console.error('Video error details:', {
+                    code: video.error.code,
+                    message: video.error.message,
+                    src: video.src
+                  });
+                }
+              }}
+              onProgress={(e) => {
+                const video = e.target as HTMLVideoElement;
+                console.log('📈 Video progress inline:', {
+                  buffered: video.buffered.length > 0 ? video.buffered.end(0) : 0,
+                  duration: video.duration,
+                  readyState: video.readyState
+                });
+              }}
+            />
+          </div>
 
-            {/* QR Code List */}
-            <div className="max-h-48 overflow-y-auto">
-              <div className="space-y-2">
-                {detections.map((detection, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                      Math.abs(currentTime - detection.time) < 0.5
-                        ? 'bg-blue-100 border-2 border-blue-500'
-                        : 'bg-white hover:bg-gray-50'
-                    }`}
-                    onClick={() => jumpToTime(detection.time)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <div className="font-semibold">{detection.text}</div>
-                        <div className="text-sm text-gray-600">
-                          Thời gian: {formatTime(detection.time)}
-                        </div>
+          {/* QR List - Right Side */}
+          <div className="w-1/3 p-4 border-l bg-gray-50 overflow-y-auto">
+            <h4 className="font-semibold mb-4">QR Codes ({detections.length})</h4>
+            <div className="space-y-2">
+              {detections.map((detection, index) => (
+                <div
+                  key={index}
+                  className="bg-white p-3 rounded-lg shadow-sm border cursor-pointer hover:bg-blue-50 transition-colors"
+                  onClick={() => jumpToTime(detection.time)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{detection.text}</div>
+                      <div className="text-xs text-gray-600">
+                        {formatTime(detection.time)}
                       </div>
                     </div>
                     <button
@@ -159,13 +559,90 @@ const QRTimeline: React.FC<QRTimelineProps> = ({ videoPath, detections, onClose 
                         e.stopPropagation();
                         jumpToTime(detection.time);
                       }}
-                      className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                      className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
                     >
-                      ▶️ Nhảy đến
+                      ▶️
                     </button>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Timeline Bar - Bottom */}
+        <div className="p-4 border-t bg-gray-50">
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="font-semibold text-sm">Timeline</h4>
+            <div className="flex gap-2">
+              {(selectionStart !== null && selectionEnd !== null) && (
+                <>
+                  <span className="text-xs text-gray-600">
+                    Đã chọn: {formatTime(Math.min(selectionStart, selectionEnd))} - {formatTime(Math.max(selectionStart, selectionEnd))}
+                  </span>
+                  <button
+                    onClick={handleExportSelectedSegment}
+                    disabled={isExporting}
+                    className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50"
+                  >
+                    {isExporting ? '⏳ Đang export...' : '📤 Export đoạn'}
+                  </button>
+                  <button
+                    onClick={clearSelection}
+                    className="px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600"
+                  >
+                    ✖️
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          
+          {/* Timeline Bar */}
+          <div 
+            className="relative bg-gray-200 rounded-lg h-6 mb-2 cursor-crosshair"
+            onMouseDown={handleProgressBarMouseDown}
+            onMouseMove={handleProgressBarMouseMove}
+            onMouseUp={handleProgressBarMouseUp}
+            onMouseLeave={handleProgressBarMouseUp}
+          >
+            {/* Selection Area */}
+            {selectionStart !== null && selectionEnd !== null && (
+              <div
+                className="absolute top-0 h-full bg-yellow-300 bg-opacity-50 border border-yellow-500"
+                style={{
+                  left: `${Math.min((selectionStart / duration) * 100, (selectionEnd / duration) * 100)}%`,
+                  width: `${Math.abs((selectionEnd - selectionStart) / duration) * 100}%`
+                }}
+              />
+            )}
+            
+            {/* Current Time Indicator */}
+            <div
+              className="absolute top-0 h-full w-1 bg-red-500 z-10"
+              style={{ left: `${getCurrentTimelinePosition()}%` }}
+            />
+            
+            {/* QR Code Markers */}
+            {detections.map((detection, index) => (
+              <div
+                key={index}
+                className="absolute top-0 h-full w-2 bg-blue-500 cursor-pointer hover:bg-blue-600 transition-colors z-20"
+                style={{ left: `${(detection.time / duration) * 100}%` }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  jumpToTime(detection.time);
+                }}
+                title={`${detection.text} - ${formatTime(detection.time)}`}
+              />
+            ))}
+          </div>
+          
+          {/* Time Display */}
+          <div className="text-sm text-gray-600 text-center">
+            {formatTime(currentTime)} / {formatTime(duration)}
+            <div className="text-xs text-gray-500 mt-1">
+              Debug: duration={duration}, currentTime={currentTime}, isFinite(duration)={isFinite(duration)}
             </div>
           </div>
         </div>

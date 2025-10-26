@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { spawn } from 'child_process';
 import { initDatabase, insertVideo, insertQRDetections, getAllVideos, deleteVideo as dbDeleteVideo, getVideoByFilename, searchVideosByQR } from './database';
 
 let mainWindow: BrowserWindow | null = null;
@@ -12,6 +13,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false, // Cho phép file:// protocol
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -149,7 +151,24 @@ ipcMain.handle('delete-video', async (_, filename) => {
 });
 
 ipcMain.handle('get-video-path', async (_, filename) => {
-  return path.join(app.getPath('userData'), 'videos', filename);
+  try {
+    const videoPath = path.join(app.getPath('userData'), 'videos', filename);
+    console.log('🎬 Getting video path for:', filename);
+    console.log('📁 Full path:', videoPath);
+    
+    // Kiểm tra file có tồn tại không
+    try {
+      await fs.access(videoPath);
+      console.log('✅ Video file exists');
+      return videoPath;
+    } catch (error) {
+      console.error('❌ Video file does not exist:', videoPath);
+      throw new Error(`Video file not found: ${filename}`);
+    }
+  } catch (error) {
+    console.error('❌ Error in get-video-path:', error);
+    throw error;
+  }
 });
 
 ipcMain.handle('search-by-qr', async (_, qrText) => {
@@ -226,6 +245,141 @@ ipcMain.handle('select-storage-folder', async () => {
   } catch (err) {
     console.error('Error selecting folder:', err);
     return null;
+  }
+});
+
+// Export QR code segments using ffmpeg
+ipcMain.handle('export-qr-segments', async (_, { filename, detections, outputDir }) => {
+  try {
+    const videosDir = path.join(app.getPath('userData'), 'videos');
+    const inputVideoPath = path.join(videosDir, filename);
+    
+    // Check if input video exists
+    try {
+      await fs.access(inputVideoPath);
+    } catch {
+      throw new Error(`Video file not found: ${filename}`);
+    }
+
+    // Create output directory if it doesn't exist
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const exportedSegments = [];
+    
+    for (let i = 0; i < detections.length; i++) {
+      const detection = detections[i];
+      const startTime = Math.max(0, detection.time - 2); // 2 seconds before QR detection
+      const duration = 5; // 5 seconds total (2 before + 3 after)
+      
+      const outputFilename = `${path.parse(filename).name}_QR_${i + 1}_${detection.text.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`;
+      const outputPath = path.join(outputDir, outputFilename);
+      
+      await new Promise((resolve, reject) => {
+        const ffmpeg = spawn('ffmpeg', [
+          '-i', inputVideoPath,
+          '-ss', startTime.toString(),
+          '-t', duration.toString(),
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-y', // Overwrite output file
+          outputPath
+        ]);
+
+        let stderr = '';
+        ffmpeg.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        ffmpeg.on('close', (code) => {
+          if (code === 0) {
+            resolve(outputPath);
+          } else {
+            reject(new Error(`FFmpeg failed with code ${code}: ${stderr}`));
+          }
+        });
+
+        ffmpeg.on('error', (err) => {
+          reject(new Error(`FFmpeg spawn error: ${err.message}`));
+        });
+      });
+
+      exportedSegments.push({
+        qrText: detection.text,
+        time: detection.time,
+        outputPath,
+        filename: outputFilename
+      });
+    }
+
+    return {
+      success: true,
+      exportedSegments,
+      outputDir
+    };
+  } catch (err) {
+    console.error('Error exporting QR segments:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error occurred'
+    };
+  }
+});
+
+// Export video segment using ffmpeg
+ipcMain.handle('export-video-segment', async (_, { inputPath, outputDir, outputFilename, startTime, endTime }) => {
+  try {
+    // Check if input video exists
+    try {
+      await fs.access(inputPath);
+    } catch {
+      throw new Error(`Video file not found: ${inputPath}`);
+    }
+
+    // Create output directory if it doesn't exist
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const outputPath = path.join(outputDir, outputFilename);
+    const duration = endTime - startTime;
+    
+    await new Promise((resolve, reject) => {
+      const ffmpeg = spawn('ffmpeg', [
+        '-i', inputPath,
+        '-ss', startTime.toString(),
+        '-t', duration.toString(),
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-y', // Overwrite output file
+        outputPath
+      ]);
+
+      let stderr = '';
+      ffmpeg.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpeg.on('close', (code) => {
+        if (code === 0) {
+          resolve(outputPath);
+        } else {
+          reject(new Error(`FFmpeg failed with code ${code}: ${stderr}`));
+        }
+      });
+
+      ffmpeg.on('error', (err) => {
+        reject(new Error(`FFmpeg spawn error: ${err.message}`));
+      });
+    });
+
+    return {
+      success: true,
+      outputPath
+    };
+  } catch (err) {
+    console.error('Error exporting video segment:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error occurred'
+    };
   }
 });
 

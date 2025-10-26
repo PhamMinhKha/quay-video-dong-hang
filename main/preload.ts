@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getStoragePath: () => ipcRenderer.invoke('get-storage-path'),
   setStoragePath: (path: string) => ipcRenderer.invoke('set-storage-path', path),
   selectStorageFolder: () => ipcRenderer.invoke('select-storage-folder'),
+  exportQRSegments: (data: { filename: string; detections: any[]; outputDir: string }) =>
+    ipcRenderer.invoke('export-qr-segments', data),
+  exportVideoSegment: (data: { inputPath: string; outputDir: string; outputFilename: string; startTime: number; endTime: number }) =>
+    ipcRenderer.invoke('export-video-segment', data),
 });
 
 export {};
