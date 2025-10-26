@@ -1,0 +1,153 @@
+═══════════════════════════════════════════════════════
+   HƯỚNG DẪN CÀI ĐẶT VÀ SỬ DỤNG
+   PHẦN MỀM ĐÓNG GỬI HÀNG
+═══════════════════════════════════════════════════════
+
+📦 YÊU CẦU HỆ THỐNG
+═══════════════════════════════════════════════════════
+✅ Node.js version 18 trở lên
+✅ npm hoặc yarn
+✅ Camera máy tính
+✅ MacOS / Windows / Linux
+
+📥 CÀI ĐẶT
+═══════════════════════════════════════════════════════
+
+Bước 1: Cài đặt dependencies
+------------------------------
+Mở terminal trong thư mục dự án và chạy lệnh:
+
+    npm install
+
+Hoặc nếu dùng yarn:
+
+    yarn install
+
+
+🚀 CHẠY ỨNG DỤNG
+═══════════════════════════════════════════════════════
+
+Chế độ Development (phát triển):
+---------------------------------
+    npm run dev
+
+Lệnh này sẽ:
+1. Build main process của Electron
+2. Khởi động Vite dev server cho React UI
+3. Mở cửa sổ Electron
+
+📦 BUILD SẢN PHẨM
+═══════════════════════════════════════════════════════
+
+Build code:
+-----------
+    npm run build
+
+Tạo file cài đặt:
+----------------
+    npm run dist
+
+File cài đặt sẽ được tạo trong thư mục "release/"
+
+
+🎯 HƯỚNG DẪN SỬ DỤNG
+═══════════════════════════════════════════════════════
+
+1. QUAY VIDEO
+-------------
+- Chọn tab "📹 Quay Video"
+- Cho phép truy cập camera khi được hỏi
+- Camera sẽ hiển thị preview
+- Phát hiện QR code realtime trong khung hình
+- Nhập ghi chú vào ô "Ghi chú" nếu cần
+- Nhấn "▶️ Bắt đầu quay" để bắt đầu quay video
+- Nhấn "⏹️ Dừng quay" để dừng và lưu video
+
+2. XEM DANH SÁCH VIDEO
+-----------------------
+- Chọn tab "📁 Danh sách Video"
+- Xem tất cả video đã quay
+- Hiển thị thông tin:
+  • Tên file
+  • Ngày giờ tạo
+  • Dung lượng
+  • Ghi chú
+  • QR codes đã phát hiện
+- Nhấn "🗑️ Xóa" để xóa video
+- Nhấn "🔄 Làm mới" để tải lại danh sách
+
+
+📁 VỊ TRÍ LƯU TRỮ
+═══════════════════════════════════════════════════════
+
+Video được lưu tại:
+
+MacOS:
+------
+~/Library/Application Support/phan-mem-dong-hang/videos/
+
+Windows:
+--------
+%APPDATA%\phan-mem-dong-hang\videos\
+
+Linux:
+------
+~/.config/phan-mem-dong-hang/videos/
+
+
+📊 METADATA LƯU KÈM VIDEO
+═══════════════════════════════════════════════════════
+
+Mỗi video có file JSON metadata đi kèm, chứa:
+• Danh sách QR codes phát hiện được
+• Tọa độ vị trí QR codes
+• Thời gian phát hiện
+• Ghi chú
+• Ngày giờ tạo video
+
+
+⚠️ LƯU Ý
+═══════════════════════════════════════════════════════
+
+✅ Ứng dụng hoạt động 100% offline
+✅ Không cần kết nối internet
+✅ Tất cả dữ liệu lưu trên máy tính
+✅ Video lưu định dạng .webm
+✅ Cần cấp quyền truy cập camera
+
+
+🛠️ XỬ LÝ LỖI
+═══════════════════════════════════════════════════════
+
+Không mở được camera:
+---------------------
+→ Kiểm tra quyền truy cập camera
+→ Đảm bảo không ứng dụng khác đang dùng camera
+→ Khởi động lại ứng dụng
+
+Video không lưu được:
+----------------------
+→ Kiểm tra dung lượng ổ cứng
+→ Đảm bảo có quyền ghi file
+→ Xem log trong DevTools (F12)
+
+QR code không phát hiện:
+------------------------
+→ Đảm bảo QR code đủ rõ nét
+→ Đủ ánh sáng
+→ Camera không bị mờ
+
+
+💡 TIPS
+═══════════════════════════════════════════════════════
+
+• Quét QR ở góc độ vuông góc để độ chính xác cao nhất
+• Để QR code chiếm tối thiểu 10% khung hình
+• Ghi chú chi tiết để dễ tra cứu sau
+• Thường xuyên xóa video cũ để tiết kiệm dung lượng
+
+
+═══════════════════════════════════════════════════════
+           Chúc bạn sử dụng tốt! 📦✨
+═══════════════════════════════════════════════════════
+

@@ -1,0 +1,77 @@
+═══════════════════════════════════════════════════════════
+        TÍCH HỢP SQLITE - THÔNG TIN
+═══════════════════════════════════════════════════════════
+
+✅ ĐÃ TÍCH HỢP SQLITE
+-------------------
+
+📦 Thư viện: better-sqlite3
+📁 Database: ~/Library/Application Support/phan-mem-dong-hang/database.db
+
+═══════════════════════════════════════════════════════════
+
+🗃️ CẤU TRÚC DATABASE:
+---------------------
+
+1. BẢNG: videos
+   - id (INTEGER PRIMARY KEY)
+   - filename (TEXT)
+   - path (TEXT)
+   - size (INTEGER)
+   - created_at (TEXT)
+   - notes (TEXT)
+
+2. BẢNG: qr_detections
+   - id (INTEGER PRIMARY KEY)
+   - video_id (INTEGER, FOREIGN KEY)
+   - qr_text (TEXT)
+   - timestamp (REAL)
+   - bbox_x, bbox_y, bbox_w, bbox_h (INTEGER)
+   - INDEX trên video_id
+
+═══════════════════════════════════════════════════════════
+
+🔄 LƯU DỮ LIỆU:
+--------------
+
+Khi quay video:
+1. File video .webm được lưu vào videos/
+2. File metadata .json vẫn được lưu (backup)
+3. Thông tin được lưu vào SQLite:
+   - Thông tin video vào bảng videos
+   - Danh sách QR detections vào bảng qr_detections
+
+Khi xem danh sách:
+- Dữ liệu được lấy từ SQLite (nhanh hơn)
+- Hiển thị đầy đủ thông tin và QR codes
+
+Khi xóa video:
+- Xóa file video và .json
+- Xóa record từ bảng videos
+- Xóa tất cả QR detections liên quan
+
+═══════════════════════════════════════════════════════════
+
+✨ LỢI ÍCH:
+-----------
+
+✅ Tra cứu nhanh - SQLite có index
+✅ Tìm kiếm dễ - Query SQL linh hoạt
+✅ Dữ liệu có cấu trúc - Foreign key, ràng buộc
+✅ Truy vấn phức tạp - JOIN, GROUP BY, ORDER BY
+✅ Backup dễ - Database file có thể export
+
+═══════════════════════════════════════════════════════════
+
+🔧 CÁC FUNCTION:
+----------------
+
+- initDatabase() - Khởi tạo database, tạo tables
+- insertVideo() - Thêm video mới
+- insertQRDetections() - Thêm QR detections (batch)
+- getAllVideos() - Lấy tất cả videos + detections
+- deleteVideo() - Xóa video và QR detections
+- getVideoByFilename() - Lấy chi tiết 1 video
+
+═══════════════════════════════════════════════════════════
+

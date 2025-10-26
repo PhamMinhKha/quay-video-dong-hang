@@ -1,0 +1,30 @@
+═══════════════════════════════════════════════════════════
+        SỬA LỖI CHỌN THƯ MỤC
+═══════════════════════════════════════════════════════════
+
+✅ ĐÃ SỬA:
+
+1. Dialog không cần mainWindow
+   - Trước: dialog.showOpenDialog(mainWindow!, ...)
+   - Sau:  dialog.showOpenDialog(...)
+
+2. Thêm error handling
+   - Try-catch cho dialog
+   - Kiểm tra filePaths tồn tại
+
+3. Đọc config
+   - Lưu vị trí đã chọn vào config.json
+   - Đọc lại khi khởi động
+
+═══════════════════════════════════════════════════════════
+
+🎯 CÁCH SỬ DỤNG:
+
+1. Mở tab "⚙️ Cài đặt"
+2. Nhấn nút "📂 Chọn thư mục"
+3. Chọn thư mục muốn lưu video
+4. Nhấn "💾 Lưu cài đặt"
+5. Khởi động lại app để áp dụng
+
+═══════════════════════════════════════════════════════════
+

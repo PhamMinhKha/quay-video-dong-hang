@@ -1,0 +1,33 @@
+═══════════════════════════════════════════════════════════
+           THAY ĐỔI MỚI - CHỌN CAMERA
+═══════════════════════════════════════════════════════════
+
+✨ TÍNH NĂNG MỚI:
+-----------------
+
+📹 CHỌN CAMERA:
+- Hiển thị dropdown danh sách tất cả camera có sẵn
+- Cho phép chuyển đổi camera trước khi quay video
+- Tự động load camera đầu tiên làm mặc định
+- Không thể đổi camera khi đang quay (đã disabled)
+
+🎯 CÁCH SỬ DỤNG:
+----------------
+
+1. Mở ứng dụng → Tab "📹 Quay Video"
+2. Xem danh sách camera trong dropdown "Chọn Camera"
+3. Chọn camera muốn dùng
+4. Preview tự động cập nhật
+5. Quay video như bình thường
+
+🔧 THAY ĐỔI KỸ THUẬT:
+---------------------
+
+- Thêm state: cameras, selectedCamera, streamRef
+- Sử dụng enumerateDevices() để lấy danh sách camera
+- getUserMedia với deviceId cụ thể
+- Tự động dừng stream cũ khi chuyển camera
+- Cleanup stream khi component unmount
+
+═══════════════════════════════════════════════════════════
+
