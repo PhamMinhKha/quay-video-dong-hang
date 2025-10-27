@@ -111,16 +111,8 @@ const CameraView: React.FC = () => {
           },
         };
 
-        // Lưu tất cả detections, không chỉ detection cuối cùng
-        setDetections(prev => {
-          const key = `${detection.text}_${detection.time.toFixed(2)}`;
-          const exists = prev.some(d => `${d.text}_${d.time.toFixed(2)}` === key);
-          if (!exists) {
-            console.log('🔍 New QR detected:', detection);
-            return [...prev, detection];
-          }
-          return prev;
-        });
+        // Chỉ hiển thị detection hiện tại, không lưu tất cả detections
+        setDetections([detection]); // Chỉ hiển thị QR code hiện tại
 
         // Lưu detection khi đang quay (chỉ cần startTimeRef > 0 và currentTime > 0)
         if (startTimeRef.current > 0 && currentTime > 0) {
@@ -438,30 +430,41 @@ const CameraView: React.FC = () => {
               autoPlay
               playsInline
               className="w-full h-full object-cover"
+              style={{ zIndex: 1, position: 'relative' }}
             />
+            <p className='absolute top-2 left-2 text-red-500 text-5xl font-bold' style={{ zIndex: 50, position: 'absolute' }}>{detections.length > 0 ? detections[0].text : ''}</p>
             <canvas
               ref={canvasRef}
               className="absolute top-0 left-0 w-full h-full pointer-events-none"
-              style={{ zIndex: 10 }}
+              style={{ zIndex: 45, position: 'absolute' }}
             />
             {/* Overlay QR detections */}
-            {detections.map((det, idx) => (
-              <div
-                key={idx}
-                className="absolute border-2 border-green-400 bg-green-400 bg-opacity-20"
-                style={{
-                  left: `${(det.bbox.x / 640) * 100}%`,
-                  top: `${(det.bbox.y / 480) * 100}%`,
-                  width: `${(det.bbox.w / 640) * 100}%`,
-                  height: `${(det.bbox.h / 480) * 100}%`,
-                  zIndex: 20
-                }}
-              >
-                <div className="bg-green-400 text-white text-xs px-1 py-0.5 absolute -top-6 left-0 whitespace-nowrap">
-                  {det.text}
+            {detections.map((det, idx) => {
+              const canvas = canvasRef.current;
+              const canvasWidth = canvas?.width || 640;
+              const canvasHeight = canvas?.height || 480;
+              
+              return (
+                <div
+                  key={idx}
+                  className="absolute border-4 border-green-500 bg-transparent"
+                  style={{
+                    left: `${(det.bbox.x / canvasWidth) * 100}%`,
+                    top: `${(det.bbox.y / canvasHeight) * 100}%`,
+                    width: `${(det.bbox.w / canvasWidth) * 100}%`,
+                    height: `${(det.bbox.h / canvasHeight) * 100}%`,
+                    zIndex: 60,
+                    position: 'absolute',
+                    borderRadius: '8px',
+                    boxShadow: '0 0 10px rgba(34, 197, 94, 0.5)'
+                  }}
+                >
+                  <div className="bg-green-500 text-white text-sm px-2 py-1 absolute -top-8 left-0 whitespace-nowrap rounded-md shadow-lg font-medium">
+                    {det.text}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Notes Section - Moved below camera */}
@@ -500,8 +503,8 @@ const CameraView: React.FC = () => {
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 className={`w-full py-3 rounded-lg font-semibold transition-all ${isRecording
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : 'bg-green-500 hover:bg-green-600 text-white'
+                  ? 'bg-red-500 hover:bg-red-600 text-white'
+                  : 'bg-green-500 hover:bg-green-600 text-white'
                   }`}
               >
                 {isRecording ? '⏹️ Dừng quay' : '▶️ Bắt đầu quay'}

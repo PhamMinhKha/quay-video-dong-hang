@@ -190,8 +190,7 @@ const Settings: React.FC = () => {
                 <div className="text-sm text-gray-700">
                   <p className="font-semibold mb-1 text-green-800">Tác giả: Phạm Minh Kha</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li><strong>Facebook:</strong> <a href="https://www.facebook.com/pminhkha" target="_blank" rel="noopener noreferrer">https://www.facebook.com/pminhkha</a></li>
-                    <li><strong>Zalo:</strong> <a href="https://zalo.me/0349501403" target="_blank" rel="noopener noreferrer">034-9501-403</a></li>
+                    <li><strong>Zalo:</strong> <a href="https://zalo.me/0981751649" target="_blank" rel="noopener noreferrer">098-175-1649</a></li>
                   </ul>
                 </div>
               </div>
