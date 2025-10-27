@@ -6,4 +6,5 @@ dist
 .DS_Store
 release/
 *.local
-.mp4
+*.mp4
+videos
