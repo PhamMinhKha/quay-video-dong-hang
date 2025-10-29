@@ -218,8 +218,10 @@ const CameraView: React.FC = () => {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             deviceId: { exact: selectedCamera },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            // Yêu cầu độ phân giải cao hơn (2K nếu camera hỗ trợ)
+            width: { min: 1280, ideal: 2560 },
+            height: { min: 720, ideal: 1440 },
+            frameRate: { ideal: 30 }
           },
           audio: false,
         });
@@ -229,6 +231,32 @@ const CameraView: React.FC = () => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
+
+          // Thử đẩy track lên độ phân giải cao nhất và log thông tin
+          const track = stream.getVideoTracks()[0];
+          try {
+            const caps = track.getCapabilities ? track.getCapabilities() : undefined;
+            const settingsBefore = track.getSettings ? track.getSettings() : undefined;
+            console.log('🎥 Track capabilities:', caps);
+            console.log('🎥 Track settings before applyConstraints:', settingsBefore);
+
+            // Ưu tiên 2560x1440 nếu có, nếu không dùng max capabilities
+            const targetWidth = caps?.width?.max ? Math.min(caps.width.max, 2560) : 2560;
+            const targetHeight = caps?.height?.max ? Math.min(caps.height.max, 1440) : 1440;
+
+            await track.applyConstraints({ width: targetWidth, height: targetHeight });
+
+            const settingsAfter = track.getSettings ? track.getSettings() : undefined;
+            console.log('🎥 Track settings after applyConstraints:', settingsAfter);
+          } catch (e) {
+            console.warn('⚠️ applyConstraints failed:', e);
+          }
+
+          console.log('🎞️ Video element resolution:', {
+            videoWidth: videoRef.current.videoWidth,
+            videoHeight: videoRef.current.videoHeight,
+          });
+
           detectQR();
         }
       } catch (err) {
