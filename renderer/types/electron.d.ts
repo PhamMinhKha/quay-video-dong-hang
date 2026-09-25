@@ -42,6 +42,35 @@ declare global {
         success: boolean;
         error?: string;
       }>;
+      adbGetDevices: () => Promise<{
+        success: boolean;
+        devices: Array<{ id: string; model: string; status: string }>;
+        error?: string;
+      }>;
+      adbForwardDevice: (deviceId: string) => Promise<{ success: boolean; message: string }>;
+      phoneStartRtsp: (rtspUrl: string) => Promise<{
+        success: boolean;
+        previewUrl: string;
+        message: string;
+      }>;
+      phoneStopRtsp: () => Promise<{ success: boolean; message?: string }>;
+      phoneStartRecord: (filename: string) => Promise<{ success: boolean; message: string }>;
+      phoneStopRecord: (metadata: any) => Promise<{ success: boolean; path?: string; message: string }>;
+      onPhoneFrame: (callback: (base64: string) => void) => () => void;
+      onPhoneQr: (
+        callback: (
+          payload: {
+            data: string;
+            width: number;
+            height: number;
+            location: {
+              topLeftCorner: { x: number; y: number };
+              bottomRightCorner: { x: number; y: number };
+            };
+          } | null
+        ) => void
+      ) => () => void;
+      onPhoneRecordDied: (callback: (info: { message: string }) => void) => () => void;
     };
   }
 }

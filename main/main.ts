@@ -1,10 +1,23 @@
-import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, session } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
 import { initDatabase, insertVideo, insertQRDetections, getAllVideos, deleteVideo as dbDeleteVideo, getVideoByFilename, searchVideosByQR } from './database';
+import { adbGetDevices, adbForwardDevice } from './adb';
+import { startPhoneRtspPreview, stopPhoneRtspPreview, disposePhonePreview, setPhoneFrameEmitter, setPhoneQrEmitter, setPhoneRecordDeathEmitter, startPhoneRecording, stopPhoneRecording } from './phoneStream';
 
 let mainWindow: BrowserWindow | null = null;
+
+// Softcam/AWC là DirectShow — tắt Media Foundation capture để tránh "Device in use" trên webcam ảo
+app.commandLine.appendSwitch(
+  'disable-features',
+  'VizDisplayCompositor,MediaFoundationVideoCapture,MediaFoundationD3D11VideoCapture'
+);
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('no-sandbox');
+// Tránh GPU memory buffer làm Softcam fail
+app.commandLine.appendSwitch('disable-video-capture-use-gpu-memory-buffer');
 
 // Cải thiện khả năng tương thích với M4 và Electron 32
 function createWindow() {
@@ -75,15 +88,36 @@ function createWindow() {
   mainWindow.on('responsive', () => {
     console.log('Window became responsive again');
   });
+
+  setPhoneFrameEmitter((b64) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('phone-frame', b64);
+    }
+  });
+
+  setPhoneQrEmitter((payload) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('phone-qr', payload);
+    }
+  });
+
+  setPhoneRecordDeathEmitter((info) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('phone-record-died', info);
+    }
+  });
 }
 
 app.on('ready', async () => {
-  // Cải thiện khả năng tương thích với M4
-  app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor');
-  app.commandLine.appendSwitch('--disable-gpu-sandbox');
-  app.commandLine.appendSwitch('--disable-software-rasterizer');
-  app.commandLine.appendSwitch('--no-sandbox');
-  
+  // Cho phép media / camera trong Electron (quan trọng với Softcam)
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media' || permission === 'mediaKeySystem');
+  });
+  session.defaultSession.setDevicePermissionHandler(() => true);
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    return permission === 'media' || permission === 'mediaKeySystem';
+  });
+
   // Tạo thư mục videos nếu chưa có
   const videosDir = path.join(app.getPath('userData'), 'videos');
   try {
@@ -103,9 +137,14 @@ app.on('ready', async () => {
 });
 
 app.on('window-all-closed', () => {
+  void disposePhonePreview();
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  void disposePhonePreview();
 });
 
 app.on('activate', () => {
@@ -115,6 +154,101 @@ app.on('activate', () => {
 });
 
 // IPC Handlers
+ipcMain.handle('adb-get-devices', async () => {
+  try {
+    const devices = await adbGetDevices();
+    return { success: true, devices };
+  } catch (err: any) {
+    return { success: false, devices: [], error: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('adb-forward-device', async (_, deviceId: string) => {
+  try {
+    return await adbForwardDevice(deviceId);
+  } catch (err: any) {
+    return { success: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('phone-start-rtsp', async (_, rtspUrl: string) => {
+  try {
+    return await startPhoneRtspPreview(rtspUrl);
+  } catch (err: any) {
+    return { success: false, previewUrl: '', message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('phone-stop-rtsp', async () => {
+  try {
+    await stopPhoneRtspPreview();
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('phone-start-record', async (_, filename: string) => {
+  try {
+    let videosDir: string;
+    try {
+      const configFile = path.join(app.getPath('userData'), 'config.json');
+      const configContent = await fs.readFile(configFile, 'utf-8');
+      const config = JSON.parse(configContent);
+      videosDir = config.storagePath || path.join(app.getPath('userData'), 'videos');
+    } catch {
+      videosDir = path.join(app.getPath('userData'), 'videos');
+    }
+    await fs.mkdir(videosDir, { recursive: true });
+    const outputPath = path.join(videosDir, filename);
+    return await startPhoneRecording(outputPath);
+  } catch (err: any) {
+    return { success: false, message: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('phone-stop-record', async (_, metadata: any) => {
+  try {
+    const result = await stopPhoneRecording();
+    if (!result.success || !result.path) {
+      return result;
+    }
+
+    const videoPath = result.path;
+    const filename = path.basename(videoPath);
+    const metadataPath = videoPath.replace(/\.[^.]+$/, '.json');
+    const stats = await fs.stat(videoPath);
+
+    await fs.writeFile(metadataPath, JSON.stringify(metadata || {}, null, 2));
+
+    const videoId = insertVideo({
+      filename,
+      path: videoPath,
+      size: stats.size,
+      created_at: metadata?.createdAt || new Date().toISOString(),
+      notes: metadata?.notes || null,
+    });
+
+    if (metadata?.detections?.length) {
+      insertQRDetections(
+        metadata.detections.map((d: any) => ({
+          video_id: videoId,
+          qr_text: d.text,
+          timestamp: d.time,
+          bbox_x: d.bbox.x,
+          bbox_y: d.bbox.y,
+          bbox_w: d.bbox.w,
+          bbox_h: d.bbox.h,
+        }))
+      );
+    }
+
+    return { success: true, path: videoPath, message: result.message };
+  } catch (err: any) {
+    return { success: false, message: err?.message || String(err) };
+  }
+});
+
 ipcMain.handle('get-videos-dir', () => {
   return path.join(app.getPath('userData'), 'videos');
 });
@@ -197,22 +331,41 @@ ipcMain.handle('list-videos', async () => {
 });
 
 ipcMain.handle('delete-video', async (_, filename) => {
-  const videosDir = path.join(app.getPath('userData'), 'videos');
-  const videoPath = path.join(videosDir, filename);
-  const metadataPath = videoPath.replace(/\.[^.]+$/, '.json');
-  
   try {
-    // Xóa file video và metadata
-    await fs.unlink(videoPath);
+    // Ưu tiên đường dẫn đã lưu trong DB (hỗ trợ thư mục lưu tùy chỉnh)
+    const dbVideo = getVideoByFilename(filename);
+    let videoPath = dbVideo?.path as string | undefined;
+
+    if (!videoPath) {
+      let videosDir = path.join(app.getPath('userData'), 'videos');
+      try {
+        const configFile = path.join(app.getPath('userData'), 'config.json');
+        const configContent = await fs.readFile(configFile, 'utf-8');
+        const config = JSON.parse(configContent);
+        if (config.storagePath) {
+          videosDir = config.storagePath;
+        }
+      } catch {
+        // Dùng đường dẫn mặc định
+      }
+      videoPath = path.join(videosDir, filename);
+    }
+
+    const metadataPath = videoPath.replace(/\.[^.]+$/, '.json');
+
+    try {
+      await fs.unlink(videoPath);
+    } catch {
+      // File có thể đã bị xóa thủ công
+    }
     try {
       await fs.unlink(metadataPath);
     } catch {
       // Metadata file có thể không tồn tại
     }
-    
-    // Xóa từ database
+
     dbDeleteVideo(filename);
-    
+
     return { success: true };
   } catch (err) {
     return { success: false, error: err };

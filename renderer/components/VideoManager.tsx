@@ -12,6 +12,7 @@ interface VideoItem {
 const VideoManager: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingOld, setDeletingOld] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [timelineVideo, setTimelineVideo] = useState<{ path: string, detections: any[] } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -87,6 +88,58 @@ const VideoManager: React.FC = () => {
     }
   };
 
+  const getVideosOlderThan = (days: number): VideoItem[] => {
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    return videos.filter((v) => new Date(v.created).getTime() < cutoff);
+  };
+
+  const handleDeleteOlderThan = async (days: number) => {
+    const toDelete = getVideosOlderThan(days);
+
+    if (toDelete.length === 0) {
+      alert(`Không có video nào quá ${days} ngày.`);
+      return;
+    }
+
+    if (
+      !confirm(
+        `Bạn có chắc muốn xóa ${toDelete.length} video quá ${days} ngày?\nThao tác này không thể hoàn tác.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingOld(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const video of toDelete) {
+        try {
+          const result = await window.electronAPI.deleteVideo(video.filename);
+          if (result?.success !== false) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          console.error('Error deleting video:', video.filename, err);
+          failCount++;
+        }
+      }
+
+      await loadVideos();
+
+      if (failCount === 0) {
+        alert(`Đã xóa ${successCount} video quá ${days} ngày.`);
+      } else {
+        alert(`Đã xóa ${successCount} video. Thất bại: ${failCount}.`);
+      }
+    } finally {
+      setDeletingOld(false);
+    }
+  };
+
   const handleShowLocation = async (filePath: string) => {
     try {
       await window.electronAPI.showInFolder(filePath);
@@ -138,7 +191,23 @@ const VideoManager: React.FC = () => {
     <div className="h-full flex flex-col p-4">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-bold">Danh sách Video</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button
+            onClick={() => handleDeleteOlderThan(16)}
+            disabled={deletingOld || loading}
+            className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Xóa tất cả video có ngày tạo quá 16 ngày"
+          >
+            {deletingOld ? '⏳ Đang xóa...' : `🗑️ Xóa >16 ngày (${getVideosOlderThan(16).length})`}
+          </button>
+          <button
+            onClick={() => handleDeleteOlderThan(30)}
+            disabled={deletingOld || loading}
+            className="px-3 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Xóa tất cả video có ngày tạo quá 30 ngày"
+          >
+            {deletingOld ? '⏳ Đang xóa...' : `🗑️ Xóa >30 ngày (${getVideosOlderThan(30).length})`}
+          </button>
           <button
             onClick={scrollToTop}
             className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm"
@@ -152,18 +221,6 @@ const VideoManager: React.FC = () => {
             title="Scroll xuống cuối (Video cũ nhất)"
           >
             ⬇️ Cũ nhất
-          </button>
-          <button
-            onClick={() => console.log('Videos:', videos)}
-            className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
-          >
-            🐛 Debug Data
-          </button>
-          <button
-            onClick={() => console.log('ElectronAPI:', window.electronAPI)}
-            className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
-          >
-            🐛 Debug API
           </button>
           <button
             onClick={loadVideos}
@@ -231,17 +288,6 @@ const VideoManager: React.FC = () => {
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
-                    <button
-                      onClick={() => {
-                        console.log('🎬 Video clicked:', video);
-                        console.log('📊 Metadata:', video.metadata);
-                        console.log('🔍 Detections:', video.metadata?.detections);
-                        console.log('📝 Notes:', video.metadata?.notes);
-                      }}
-                      className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-xs"
-                    >
-                      🐛 Debug Video
-                    </button>
                     <button
                       onClick={() => handleShowTimeline(video)}
                       className={`px-4 py-2 rounded-lg text-sm ${video.metadata?.detections && video.metadata.detections.length > 0

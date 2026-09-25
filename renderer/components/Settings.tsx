@@ -151,6 +151,37 @@ const Settings: React.FC = () => {
 
           {/* Info Section */}
           <div className="mt-6 space-y-4">
+            {/* AWC / Điện thoại làm camera */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+              <div className="flex items-start">
+                <div className="text-2xl mr-3">📱</div>
+                <div className="text-sm text-gray-700">
+                  <p className="font-semibold mb-2 text-indigo-900">Dùng điện thoại làm camera (AWC)</p>
+                  <p className="mb-2">
+                    App này không nhúng mã nguồn AWP — dùng{' '}
+                    <a
+                      href="https://github.com/soubhagyajit/Android-Webcam-Project"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-700 underline font-medium"
+                    >
+                      Android Webcam Project
+                    </a>{' '}
+                    chạy song song. AWC tạo webcam ảo trên Windows; phần mềm đóng hàng chỉ cần chọn camera đó.
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 mb-2">
+                    <li>Cài <strong>AWA</strong> trên điện thoại Android và <strong>AWC</strong> trên PC (bản client ≥ v1.0.6 có virtual webcam).</li>
+                    <li>Mở AWA → cấp quyền camera → bắt đầu stream (USB hoặc cùng WiFi).</li>
+                    <li>Mở AWC trên PC → Connect tới điện thoại.</li>
+                    <li>Trong tab <strong>Quay Video</strong>, chọn camera có nhãn AWC / Softcam (hoặc bấm Làm mới).</li>
+                  </ol>
+                  <p className="text-xs text-indigo-800">
+                    USB ổn định hơn WiFi. Nếu không thấy camera: mở firewall cổng 8080/8554, đóng Zoom/Teams đang chiếm camera, rồi Làm mới.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Warning */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="flex items-start">

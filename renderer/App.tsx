@@ -52,13 +52,13 @@ const App: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       {/* Header */}
-      <div className="bg-blue-600 text-white px-6 py-4 shadow-lg">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">📦 Phần mềm Đóng Gửi Hàng</h1>
-          <div className="flex gap-2">
+      <div className="bg-blue-600 text-white px-4 py-2 shadow shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-lg font-bold whitespace-nowrap">📦 Đóng Gửi Hàng</h1>
+          <div className="flex gap-1.5 flex-wrap justify-end">
             <button
               onClick={() => setActiveTab('record')}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
                 activeTab === 'record' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
               }`}
             >
@@ -69,7 +69,7 @@ const App: React.FC = () => {
                 console.log('🔄 Switching to videos tab');
                 setActiveTab('videos');
               }}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
                 activeTab === 'videos' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
               }`}
             >
@@ -77,7 +77,7 @@ const App: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('search')}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
                 activeTab === 'search' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
               }`}
             >
@@ -85,7 +85,7 @@ const App: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('settings')}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
                 activeTab === 'settings' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
               }`}
             >

@@ -1,6 +1,6 @@
 {
   "name": "phan-mem-dong-hang",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Ứng dụng quay video + quét QR code cho đóng gửi hàng (offline)",
   "author": "Phạm Minh Kha",
@@ -33,7 +33,20 @@
       "node_modules/"
     ],
     "asar": true,
+    "asarUnpack": [
+      "**/ffmpeg-static/**",
+      "**/better-sqlite3/**"
+    ],
     "icon": "logo.png",
+    "extraResources": [
+      {
+        "from": "resources/adb",
+        "to": "adb",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "mac": {
       "target": [
         {
@@ -57,28 +70,26 @@
         {
           "target": "nsis",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         },
         {
           "target": "portable",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "x64",
-            "ia32"
+            "x64"
           ]
         }
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "publisherName": "Phạm Minh Kha",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
     },
     "linux": {
       "target": "AppImage",
@@ -111,6 +122,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.4.1",
+    "ffmpeg-static": "^5.3.0",
     "jsqr": "^1.4.0"
   },
   "devDependencies": {
@@ -140,5 +152,12 @@
     "offline",
     "vite",
     "typescript"
-  ]
+  ],
+  "allowScripts": {
+    "better-sqlite3@12.4.1": true,
+    "electron@32.3.3": true,
+    "esbuild@0.21.5": true,
+    "lzma-native@8.0.6": true,
+    "ffmpeg-static@5.3.0": true
+  }
 }
