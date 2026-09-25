@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1] — 2026-09-25
+
+### UI / Windows
+- Bỏ header xanh trùng tên app (Windows đã có title bar); chỉ giữ thanh tab gọn
+- Tắt menu File/Edit/View mặc định của Electron
+- Gỡ tuỳ chọn cửa sổ macOS không dùng trên Windows
+- Xóa `resources/platform-tools` thừa (chỉ giữ `resources/adb`)
+
 ## [1.1.0] — 2026-09-25
 
 ### Kết nối điện thoại (AWA) — không cần Virtual Cam / Softcam

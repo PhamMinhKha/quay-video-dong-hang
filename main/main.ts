@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, session, Menu } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
@@ -16,42 +16,31 @@ app.commandLine.appendSwitch(
 app.commandLine.appendSwitch('disable-gpu-sandbox');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('no-sandbox');
-// Tránh GPU memory buffer làm Softcam fail
 app.commandLine.appendSwitch('disable-video-capture-use-gpu-memory-buffer');
 
-// Cải thiện khả năng tương thích với M4 và Electron 32
+// Bỏ menu File/Edit/View mặc định của Electron trên Windows
+Menu.setApplicationMenu(null);
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: 'Phan Mem Dong Hang',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Cho phép file:// protocol
+      webSecurity: false,
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
-      // Cải thiện cho M4 chip
-      experimentalFeatures: false,
-      // Tối ưu hóa memory cho M4
-      v8CacheOptions: 'code',
-      // Tắt các tính năng có thể gây xung đột trên M4
       spellcheck: false,
       backgroundThrottling: false,
     },
-    // Tối ưu hóa cho M4
-    titleBarStyle: 'default',
-    trafficLightPosition: { x: 20, y: 20 },
-    show: false, // Không hiện window ngay lập tức
-    // Cải thiện hiệu suất trên M4
-    useContentSize: true,
-    acceptFirstMouse: true,
+    show: false,
+    autoHideMenuBar: true,
   });
 
-  // Hiện window khi đã ready với delay để tránh crash trên M4
   mainWindow.once('ready-to-show', () => {
-    setTimeout(() => {
-      mainWindow?.show();
-    }, 100);
+    mainWindow?.show();
   });
 
   // Kiểm tra xem có phải dev mode không
@@ -59,8 +48,6 @@ function createWindow() {
   
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    // Uncomment để mở DevTools khi debug
-    // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }

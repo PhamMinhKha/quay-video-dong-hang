@@ -51,47 +51,41 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* Header */}
-      <div className="bg-blue-600 text-white px-4 py-2 shadow shrink-0">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-bold whitespace-nowrap">📦 Đóng Gửi Hàng</h1>
-          <div className="flex gap-1.5 flex-wrap justify-end">
-            <button
-              onClick={() => setActiveTab('record')}
-              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                activeTab === 'record' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
-              }`}
-            >
-              📹 Quay Video
-            </button>
-            <button
-              onClick={() => {
-                console.log('🔄 Switching to videos tab');
-                setActiveTab('videos');
-              }}
-              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                activeTab === 'videos' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
-              }`}
-            >
-              📁 Danh sách Video
-            </button>
-            <button
-              onClick={() => setActiveTab('search')}
-              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                activeTab === 'search' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
-              }`}
-            >
-              🔍 Tìm theo QR
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                activeTab === 'settings' ? 'bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
-              }`}
-            >
-              ⚙️ Cài đặt
-            </button>
-          </div>
+      {/* Tab bar — không lặp tên app (Windows đã có title bar) */}
+      <div className="bg-slate-800 text-white px-2 py-1.5 shadow shrink-0">
+        <div className="flex gap-1 flex-wrap">
+          <button
+            onClick={() => setActiveTab('record')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+              activeTab === 'record' ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            Quay Video
+          </button>
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+              activeTab === 'videos' ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            Danh sách Video
+          </button>
+          <button
+            onClick={() => setActiveTab('search')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+              activeTab === 'search' ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            Tìm theo QR
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+              activeTab === 'settings' ? 'bg-slate-600' : 'bg-slate-700 hover:bg-slate-600'
+            }`}
+          >
+            Cài đặt
+          </button>
         </div>
       </div>
 
