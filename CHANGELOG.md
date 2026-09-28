@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.2] — 2026-09-28
+
+### Fix bản release (ffmpeg)
+- Sửa lỗi `spawn ffmpeg.exe ENOENT` trên Windows portable/NSIS: resolve path qua `app.asar.unpacked` + `extraResources/ffmpeg`
+- Bundle `ffmpeg.exe` vào `resources/ffmpeg` khi đóng gói
+- Bắt lỗi spawn ffmpeg để không crash main process
+
+### MJPEG / H264
+- Khi AWA đang MJPEG: cố chuyển sang H264/RTSP (cần để quay 1080p)
+- Thông báo rõ nếu chỉ xem được MJPEG — hướng dẫn chọn H264 trong AWA rồi Kết nối lại
+
 ## [1.1.1] — 2026-09-25
 
 ### UI / Windows

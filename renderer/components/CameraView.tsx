@@ -774,22 +774,73 @@ const CameraView: React.FC = () => {
         /* optional */
       }
 
-      const protocol = String(features?.stream_protocol || '').toUpperCase();
+      let protocol = String(features?.stream_protocol || '').toUpperCase();
       const rtspPort = String(features?.rtsp_port || features?.stream_port || '8554');
       let previewUrl = `${base}/video`;
 
-      if (protocol.includes('RTSP') || protocol.includes('H264')) {
-        setPhoneStatus(`Phát hiện ${protocol || 'RTSP'} — đang mở preview qua ffmpeg...`);
+      // Quay 1080p cần RTSP/H264. Nếu AWA đang MJPEG → cố chuyển sang H264.
+      const isRtspCapable =
+        protocol.includes('RTSP') ||
+        protocol.includes('H264') ||
+        protocol.includes('H.264') ||
+        protocol.includes('AVC');
+
+      if (!isRtspCapable) {
+        setPhoneStatus('Phát hiện MJPEG — đang chuyển AWA sang H264/RTSP để quay được...');
+        const switchParams = [
+          'stream_protocol=h264',
+          'video_codec=h264',
+          'codec=h264',
+          'protocol=rtsp',
+        ];
+        for (const q of switchParams) {
+          try {
+            await fetch(`${base}/control?${q}`, { signal: AbortSignal.timeout(2000) });
+          } catch {
+            /* thử param tiếp */
+          }
+        }
+        try {
+          const res2 = await fetch(`${base}/features`, { signal: AbortSignal.timeout(3000) });
+          if (res2.ok) {
+            features = await res2.json();
+            protocol = String(features?.stream_protocol || '').toUpperCase();
+          }
+        } catch {
+          /* dùng protocol cũ */
+        }
+      }
+
+      const useRtsp =
+        protocol.includes('RTSP') ||
+        protocol.includes('H264') ||
+        protocol.includes('H.264') ||
+        protocol.includes('AVC') ||
+        !protocol.includes('MJPEG');
+
+      if (useRtsp) {
+        setPhoneStatus(`Phát hiện ${protocol || 'RTSP/H264'} — đang mở preview qua ffmpeg...`);
         const rtspUrl = `rtsp://${host}:${rtspPort}`;
         const started = await window.electronAPI.phoneStartRtsp(rtspUrl);
         if (!started.success || !started.previewUrl) {
-          throw new Error(started.message || 'Không mở được RTSP preview');
+          // Fallback MJPEG chỉ xem, không quay được 1080p
+          if (protocol.includes('MJPEG') || !isRtspCapable) {
+            previewUrl = `${base}/video?t=${Date.now()}`;
+            setPhoneStatus(
+              'Chỉ xem được MJPEG — chưa có H264/RTSP. Trong AWA hãy chọn codec H264/RTSP rồi Kết nối lại để quay.'
+            );
+          } else {
+            throw new Error(started.message || 'Không mở được RTSP preview');
+          }
+        } else {
+          previewUrl = `${started.previewUrl}?t=${Date.now()}`;
+          setPhoneStatus(started.message);
         }
-        previewUrl = `${started.previewUrl}?t=${Date.now()}`;
-        setPhoneStatus(started.message);
       } else {
         previewUrl = `${base}/video?t=${Date.now()}`;
-        setPhoneStatus(`Đã kết nối MJPEG ${base}/video`);
+        setPhoneStatus(
+          'Đã kết nối MJPEG (chỉ xem). Trong AWA chuyển sang H264/RTSP rồi Kết nối lại để quay video.'
+        );
       }
 
       sourceModeRef.current = 'phone';

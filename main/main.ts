@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
 import { initDatabase, insertVideo, insertQRDetections, getAllVideos, deleteVideo as dbDeleteVideo, getVideoByFilename, searchVideosByQR } from './database';
 import { adbGetDevices, adbForwardDevice } from './adb';
-import { startPhoneRtspPreview, stopPhoneRtspPreview, disposePhonePreview, setPhoneFrameEmitter, setPhoneQrEmitter, setPhoneRecordDeathEmitter, startPhoneRecording, stopPhoneRecording } from './phoneStream';
+import { startPhoneRtspPreview, stopPhoneRtspPreview, disposePhonePreview, setPhoneFrameEmitter, setPhoneQrEmitter, setPhoneRecordDeathEmitter, startPhoneRecording, stopPhoneRecording, resolveFfmpegPath } from './phoneStream';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -544,7 +544,8 @@ ipcMain.handle('export-qr-segments', async (_, { filename, detections, outputDir
       const outputPath = path.join(outputDir, outputFilename);
       
       await new Promise((resolve, reject) => {
-        const ffmpeg = spawn('ffmpeg', [
+        const ffmpegBin = resolveFfmpegPath();
+        const ffmpeg = spawn(ffmpegBin, [
           '-i', inputVideoPath,
           '-ss', startTime.toString(),
           '-t', duration.toString(),
@@ -611,7 +612,8 @@ ipcMain.handle('export-video-segment', async (_, { inputPath, outputDir, outputF
     const duration = endTime - startTime;
     
     await new Promise((resolve, reject) => {
-      const ffmpeg = spawn('ffmpeg', [
+      const ffmpegBin = resolveFfmpegPath();
+      const ffmpeg = spawn(ffmpegBin, [
         '-i', inputPath,
         '-ss', startTime.toString(),
         '-t', duration.toString(),

@@ -137,25 +137,68 @@ function scanQrFromJpeg(jpeg: Buffer): void {
   });
 }
 
-function resolveFfmpegPath(): string {
+export function resolveFfmpegPath(): string {
+  const binary = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  const candidates: string[] = [];
+
+  const pushUnique = (p?: string | null) => {
+    if (!p) return;
+    if (!candidates.includes(p)) candidates.push(p);
+  };
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { app } = require('electron') as typeof import('electron');
+    if (app?.isPackaged && process.resourcesPath) {
+      // Ưu tiên extraResources (chạy được chắc chắn ngoài asar)
+      pushUnique(path.join(process.resourcesPath, 'ffmpeg', binary));
+      pushUnique(
+        path.join(
+          process.resourcesPath,
+          'app.asar.unpacked',
+          'node_modules',
+          'ffmpeg-static',
+          binary
+        )
+      );
+    }
+  } catch {
+    /* app chưa sẵn sàng */
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const p = require('ffmpeg-static') as string | null;
-    if (p && fs.existsSync(p)) return p;
+    if (p) {
+      // Bản đóng gói: luôn thử .asar.unpacked trước path trong asar
+      if (p.includes('app.asar')) {
+        pushUnique(p.replace('app.asar', 'app.asar.unpacked'));
+      }
+      pushUnique(p);
+    }
   } catch {
     /* ignore */
   }
 
-  const candidates = [
-    path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
-    path.join(process.cwd(), 'node_modules', 'ffmpeg-static', 'ffmpeg'),
-    path.join(process.resourcesPath || '', 'ffmpeg', 'ffmpeg.exe'),
-    path.join(process.resourcesPath || '', 'ffmpeg', 'ffmpeg'),
-  ];
+  pushUnique(path.join(process.cwd(), 'node_modules', 'ffmpeg-static', binary));
+  pushUnique(path.join(__dirname, '..', '..', 'node_modules', 'ffmpeg-static', binary));
+  pushUnique(path.join(__dirname, '..', 'node_modules', 'ffmpeg-static', binary));
+
   for (const c of candidates) {
-    if (c && fs.existsSync(c)) return c;
+    try {
+      // Không tin existsSync trên path trong app.asar — spawn không chạy được binary trong asar
+      if (c.includes(`${path.sep}app.asar${path.sep}`) || c.includes('/app.asar/')) continue;
+      if (c && fs.existsSync(c)) {
+        console.log('✅ Using ffmpeg at:', c);
+        return c;
+      }
+    } catch {
+      /* ignore */
+    }
   }
-  throw new Error('Không tìm thấy ffmpeg. Cần ffmpeg-static để xem/ghi stream RTSP từ AWA.');
+  throw new Error(
+    'Không tìm thấy ffmpeg.exe trong bản cài. Hãy build lại (asarUnpack + extraResources ffmpeg).'
+  );
 }
 
 function broadcastJpeg(jpeg: Buffer) {
@@ -333,6 +376,11 @@ export async function startPhoneRtspPreview(
   const proc = spawn(ffmpeg, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   previewProc = proc;
 
+  proc.on('error', (err) => {
+    console.error('ffmpeg preview spawn error:', err);
+    if (previewProc === proc) previewProc = null;
+  });
+
   proc.stderr?.on('data', (d) => {
     const msg = d.toString().trim();
     if (msg) console.log('[ffmpeg-preview]', msg);
@@ -381,7 +429,11 @@ export async function startPhoneRecording(
   outputPath: string
 ): Promise<{ success: boolean; message: string }> {
   if (!currentRtspUrl) {
-    return { success: false, message: 'Chưa có RTSP URL — hãy kết nối điện thoại trước.' };
+    return {
+      success: false,
+      message:
+        'Chưa có luồng RTSP/H264 — AWA đang MJPEG nên không quay được. Trong AWA chọn H264/RTSP rồi Kết nối lại.',
+    };
   }
   if (recordProc) {
     return { success: false, message: 'Đang quay rồi.' };
@@ -428,10 +480,26 @@ export async function startPhoneRecording(
       outputPath,
     ];
 
-    console.log('🔴 Record 1080p:', args.join(' '));
+    console.log('🔴 Record 1080p:', ffmpeg, args.join(' '));
     recordStopExpected = false;
     const proc = spawn(ffmpeg, args, { windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
     recordProc = proc;
+
+    proc.on('error', (err) => {
+      console.error('ffmpeg record spawn error:', err);
+      if (recordProc === proc) {
+        recordProc = null;
+        if (!recordStopExpected && recordDeathEmitter) {
+          try {
+            recordDeathEmitter({
+              message: `Không chạy được ffmpeg: ${err.message}`,
+            });
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    });
 
     proc.stderr?.on('data', (d) => {
       const msg = d.toString().trim();
